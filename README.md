@@ -1,12 +1,12 @@
-﻿# Hybrid Deep Learning Models For Diabetic Retinopathy Stage Classification Using Fundus Images
+﻿# Feature pitched transformer model for automated diabetic retinopathy severity classification on fundus images
 
 📌 Project Overview
 
 Diabetic Retinopathy (DR) is a major microvascular complication of diabetes and a leading cause of preventable blindness. Early detection and multi-stage classification (0: No DR, 1: Mild, 2: Moderate, 3: Severe, 4: Proliferative DR) are critical for timely treatment.
 
 This repository provides an automated deep learning pipeline based on the original research:
-- **Original Paper**: [Hybrid deep learning models for diabetic retinopathy stage classification using fundus images](https://link.springer.com/article/10.1007/s40200-026-01938-z) (Journal of Diabetes & Metabolic Disorders, Springer).
-- **Authors**: Amira Echtioui & Fathi Kallel.
+- **Original Paper**: [Feature pitched transformer model for automated diabetic retinopathy severity classification on fundus images](https://link.springer.com/article/10.1007/s42979-025-04361-y) (International Journal of Diabetes in Developing Countries, Springer).
+- **Authors**: Allin Geo A.V, Lavanya M, Govindharaj I, dan Malathi V.
 
 ## 📊 Datasets Used
 
@@ -14,7 +14,6 @@ The pipeline utilizes two primary fundus photography datasets for training and v
 
 | Dataset | Description | Source Link |
 | :--- | :--- | :--- |
-| **Messidor (Preprocessed)** | Preprocessed fundus image collection formatted for EyePACS/Messidor DR grading. | [Kaggle Dataset](https://www.kaggle.com/datasets/mohammadasimbluemoon/diabeticretinopathy-messidor-eyepac-preprocessed) |
 | **APTOS 2019** | Kaggle Blindness Detection competition dataset containing 3,662 labeled high-resolution fundus images across 5 severity stages. | [Kaggle Competition](https://www.kaggle.com/competitions/aptos2019-blindness-detection) |
 
 
