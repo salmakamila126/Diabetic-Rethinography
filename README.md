@@ -1,12 +1,12 @@
-﻿# Feature pitched transformer model for automated diabetic retinopathy severity classification on fundus images
+﻿# CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging
 
 📌 Project Overview
 
-Diabetic Retinopathy (DR) is a major microvascular complication of diabetes and a leading cause of preventable blindness. Early detection and multi-stage classification (0: No DR, 1: Mild, 2: Moderate, 3: Severe, 4: Proliferative DR) are critical for timely treatment.
+Diabetic Retinopathy (DR) is a leading cause of vision impairment globally. Accurate multi-stage classification is vital for early clinical intervention. Standard Convolutional Neural Networks (CNNs) often struggle with long-range spatial context, while standard Vision Transformers (ViTs) can overlook local fine-grained microvascular lesion features.
 
 This repository provides an automated deep learning pipeline based on the original research:
-- **Original Paper**: [Feature pitched transformer model for automated diabetic retinopathy severity classification on fundus images](https://link.springer.com/article/10.1007/s42979-025-04361-y) (International Journal of Diabetes in Developing Countries, Springer).
-- **Authors**: Allin Geo A.V, Lavanya M, Govindharaj I, dan Malathi V.
+- **Original Paper**: [CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging](https://ieeexplore.ieee.org/document/11009024) (IEEE Access).
+- **Authors**: YE WANG, XIAOFANG GOU, AND WENMAN LI
 
 ## 📊 Datasets Used
 
@@ -14,6 +14,7 @@ The pipeline utilizes two primary fundus photography datasets for training and v
 
 | Dataset | Description | Source Link |
 | :--- | :--- | :--- |
-| **APTOS 2019** | Kaggle Blindness Detection competition dataset containing 3,662 labeled high-resolution fundus images across 5 severity stages. | [Kaggle Competition](https://www.kaggle.com/competitions/aptos2019-blindness-detection) |
+| **APTOS 2019** | Kaggle Blindness Detection competition dataset containing 3,662 labeled high-resolution fundus images across 5 severity stages. | [Kaggle ](https://www.kaggle.com/competitions/aptos2019-blindness-detection) |
+| **DDR (Diabetic Retinopathy)** | Multi-center dataset with 13,673 fundus images featuring varied lighting, field of view, and camera hardware. | [Kaggle ](https://www.kaggle.com/datasets/mariaherrerot/ddrdataset) |
 
 
