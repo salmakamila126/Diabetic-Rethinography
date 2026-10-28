@@ -69,4 +69,23 @@ Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya
 
 ## Status implementasi
 
-Cell awal notebook memvalidasi APTOS: keberadaan file, ID ganda, pasangan gambar–label, kelas valid, dan gambar yang gagal dibaca. EDA partner tetap tersedia. Pemetaan label DDR, split, PyTorch Dataset/DataLoader, model, training, dan evaluasi belum dianggap selesai hingga data resmi dapat diperiksa dan tahap tersebut diimplementasikan.
+Notebook tetap mempertahankan seluruh EDA/preprocessing partner. Implementasi kandidat arsitektur, preprocessing eksperimen, validasi dan manifest split berkelompok 8:1:1, Dataset/DataLoader, training, checkpoint/resume, W&B, dan evaluasi test sudah tersedia sebagai kode. **APTOS dan DDR belum dijalankan sebagai eksperimen nyata** karena dataset belum tersedia di server. Jumlah parameter kandidat yang diuji sebelumnya adalah 5.693.621, sedangkan Tabel 1 paper melaporkan 7.262.900 pada reduction ratio 16. Detail internal yang tidak dijelaskan paper ditandai sebagai *implementation assumption* di notebook.
+
+## Menjalankan eksperimen secara manual di GPU KC
+
+Semua edit dilakukan di laptop lokal. Setelah notebook direview dan disalin ke server dengan cara manual yang dipilih peneliti, jalankan hanya kode notebook biasa; jangan memasang atau menjalankan Codex/agentic tools di server. Dari terminal server, folder kerja awal:
+
+~~~bash
+cd /mnt/home/probation-03/Kel_13
+export CAD_VIT_DATA_ROOT=/path/ke/CAD_ViT/datasets
+export CAD_VIT_RUN_ROOT=/mnt/home/probation-03/Kel_13/cad_vit_runs
+export CAD_VIT_WANDB_PROJECT=CAD-ViT-reproduction
+~~~
+
+Ganti `CAD_VIT_DATA_ROOT` dengan lokasi dataset **yang benar-benar ada** dan berisi `APTOS2019/` serta `DDR/`. `CAD_VIT_RUN_ROOT` harus berada di luar repository; manifest, checkpoint, dan log W&B akan disimpan di sana. Jalankan Jupyter dari direktori clone repository yang sebenarnya di bawah `Kel_13` (nama direktori clone perlu diperiksa manual), lalu buka `CAD_ViT.ipynb`. Jangan jalankan contoh training sebelum manifest data nyata terbentuk dan diperiksa.
+
+Untuk APTOS, gunakan `prepare_manifest("APTOS2019")` setelah preflight notebook sukses. Untuk DDR, ekstrak dan audit arsip sekali di luar notebook, inspeksi skema label, lalu buat CSV pemetaan **di luar repository** dengan kolom `image_id,label,image_path` dan bila tersedia `group_id` pasien; `image_path` relatif terhadap `DDR/`. Panggil `prepare_manifest("DDR", ddr_mapping_csv=...)`. Notebook tidak mengasumsikan nama folder atau format label internal DDR. Split disimpan agar training, ablation, dan evaluasi memakai pembagian yang sama.
+
+Target paper ialah 512×512, LR 0,000186, batch 16, 80 epoch, dan attention reduction ratio 16 (§IV.B). Pada RTX 3060 12 GB, opsi `physical_batch_size=4, accumulation=4, amp=True` mempertahankan batch efektif nominal 16, tetapi bukan eksekusi yang identik dengan batch fisik 16. Catat setiap deviasi dalam konfigurasi run. Contoh pemanggilan dan smoke test data nyata ada di bagian 5 notebook. Evaluasi test dipanggil terpisah setelah pemilihan model berdasarkan validation set selesai.
+
+Dependensi runtime tambahan yang perlu dipastikan tersedia: `torchvision` yang cocok dengan versi PyTorch, `Pillow`, `numpy`, dan `jupyter`; `torch`, `pandas`, `opencv-python`/`opencv-python-headless`, `scikit-learn`, `matplotlib`, `seaborn`, serta `wandb` juga dipakai notebook. Jangan menyimpan token W&B di notebook atau repository. Mode W&B default `offline`; mode `online` memerlukan autentikasi melalui environment atau mekanisme login manual yang aman.
