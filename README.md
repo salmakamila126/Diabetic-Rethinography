@@ -11,7 +11,7 @@ Reproduksi penelitian [CAD-ViT (2025)](https://ieeexplore.ieee.org/document/1100
 
 Unduh dataset secara manual dari sumber resminya dan simpan **di luar repository**. Akses APTOS mungkin memerlukan login dan persetujuan aturan kompetisi. Notebook mencari tepat satu <code>train.csv</code> dan satu direktori <code>train_images</code> di dalam <code>APTOS2019/</code>, lalu memeriksa pasangan <code>id_code</code>–gambar dan <code>diagnosis</code> kelas 0–4. Gambar test kompetisi tidak dipakai untuk data berlabel. Jika berkas masih berupa arsip, ekstrak terlebih dahulu; notebook tidak mengunduh atau mengekstraknya.
 
-Struktur internal OIA-DDR belum diasumsikan. Setelah ekstraksi, periksa berkas label, format kelas, dan lokasi gambar sebelum menambahkan pemetaan label DDR ke notebook. Keberadaan gambar saja tidak berarti DDR siap untuk training.
+Pada server yang diaudit, anotasi DDR berada di <code>DDR/DDR-dataset/DR_grading/train.txt</code>, <code>valid.txt</code>, dan <code>test.txt</code>; setiap baris berisi <code>filename.jpg label</code>. Notebook mencari tepat satu direktori <code>DR_grading</code> dengan ketiga anotasi tersebut dan mencocokkan nama gambar secara unik. Dari 13.673 anotasi, 12.522 label 0–4 dipakai untuk grading lima kelas (§IV.B paper); 1.151 label 5 (ungradable) tetap ada pada dataset mentah dan tidak masuk manifest eksperimen.
 
 ## Konfigurasi path pada Colab dan server Linux
 
@@ -65,11 +65,11 @@ Jika uji integritas ZIP gagal, jangan gunakan hasilnya. Periksa nama folder, ber
 unzip DDR-dataset.zip -d extracted
 ~~~
 
-Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya; hash lokal saja tidak membuktikan keaslian unduhan. Setelah ekstraksi, inspeksi lokasi gambar dan label yang sebenarnya. Notebook hanya menginventarisasi DDR dan tidak melakukan penggabungan atau ekstraksi ulang setiap run.
+Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya; hash lokal saja tidak membuktikan keaslian unduhan. Server yang diaudit sudah memiliki <code>/mnt/home/probation-03/Kel_13/datasets/DDR/DDR-dataset/DR_grading/</code>; jangan menggabungkan atau mengekstrak ulang arsip di sana. Cell preflight hanya menginventarisasi; fungsi <code>ddr_records()</code> membaca anotasi dan memvalidasi pasangan gambar saat manifest diminta.
 
 ## Status implementasi
 
-Notebook tetap mempertahankan seluruh EDA/preprocessing partner. Implementasi kandidat arsitektur, preprocessing eksperimen, validasi dan manifest split berkelompok 8:1:1, Dataset/DataLoader, training, checkpoint/resume, W&B, dan evaluasi test sudah tersedia sebagai kode. **APTOS dan DDR belum dijalankan sebagai eksperimen nyata** karena dataset belum tersedia di server. Jumlah parameter kandidat yang diuji sebelumnya adalah 5.693.621, sedangkan Tabel 1 paper melaporkan 7.262.900 pada reduction ratio 16. Detail internal yang tidak dijelaskan paper ditandai sebagai *implementation assumption* di notebook.
+Notebook mempertahankan EDA/preprocessing partner. Pipeline DDR kini membaca anotasi resmi, menyimpan split bawaan untuk audit, dan menyiapkan split reproduksi 8:1:1 berkelompok SHA-256. Audit yang diberikan pengguna melaporkan 12.422 grup unik, 97 grup duplikat, 9 grup melintasi split resmi, dan nol konflik label pada 12.522 gambar grading; notebook lokal belum dijalankan pada dataset server. ID split eksperimen penulis tidak tersedia. Model tetap kandidat dengan 5.282.101 parameter, berbeda dari 7.262.900 pada Tabel 1 paper (r=16). Training dan evaluasi nyata belum dijalankan.
 
 ## Menjalankan eksperimen secara manual di GPU KC
 
@@ -84,7 +84,7 @@ export CAD_VIT_WANDB_PROJECT=CAD-ViT-reproduction
 
 Ganti `CAD_VIT_DATA_ROOT` dengan lokasi dataset **yang benar-benar ada** dan berisi `APTOS2019/` serta `DDR/`. `CAD_VIT_RUN_ROOT` harus berada di luar repository; manifest, checkpoint, dan log W&B akan disimpan di sana. Jalankan Jupyter dari direktori clone repository yang sebenarnya di bawah `Kel_13` (nama direktori clone perlu diperiksa manual), lalu buka `CAD_ViT.ipynb`. Jangan jalankan contoh training sebelum manifest data nyata terbentuk dan diperiksa.
 
-Untuk APTOS, gunakan `prepare_manifest("APTOS2019")` setelah preflight notebook sukses. Untuk DDR, ekstrak dan audit arsip sekali di luar notebook, inspeksi skema label, lalu buat CSV pemetaan **di luar repository** dengan kolom `image_id,label,image_path` dan bila tersedia `group_id` pasien; `image_path` relatif terhadap `DDR/`. Panggil `prepare_manifest("DDR", ddr_mapping_csv=...)`. Notebook tidak mengasumsikan nama folder atau format label internal DDR. Split disimpan agar training, ablation, dan evaluasi memakai pembagian yang sama.
+Untuk APTOS, gunakan `prepare_manifest("APTOS2019")` setelah preflight sukses. Untuk DDR, gunakan `prepare_manifest("DDR")` setelah direktori DR_grading resmi tersedia; CSV mapping manual tidak diperlukan. Fungsi ini mempertahankan 12.522 gambar berlabel 0–4, mencatat keanggotaan split train/valid/test resmi dalam manifest/metadata, lalu membuat split reproduksi 8:1:1 dengan seed 42 dan grup SHA-256 agar gambar identik tidak melintasi split. Manifest disimpan di luar repo dan tidak ditimpa bila fingerprint berubah.
 
 Target paper ialah 512×512, LR 0,000186, batch 16, 80 epoch, dan attention reduction ratio 16 (§IV.B). Pada RTX 3060 12 GB, opsi `physical_batch_size=4, accumulation=4, amp=True` mempertahankan batch efektif nominal 16, tetapi bukan eksekusi yang identik dengan batch fisik 16. Catat setiap deviasi dalam konfigurasi run. Contoh pemanggilan dan smoke test data nyata ada di bagian 5 notebook. Evaluasi test dipanggil terpisah setelah pemilihan model berdasarkan validation set selesai.
 
