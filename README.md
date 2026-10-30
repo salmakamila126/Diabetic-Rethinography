@@ -67,9 +67,20 @@ unzip DDR-dataset.zip -d extracted
 
 Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya; hash lokal saja tidak membuktikan keaslian unduhan. Server yang diaudit sudah memiliki <code>/mnt/home/probation-03/Kel_13/datasets/DDR/DDR-dataset/DR_grading/</code>; jangan menggabungkan atau mengekstrak ulang arsip di sana. Cell preflight hanya menginventarisasi; fungsi <code>ddr_records()</code> membaca anotasi dan memvalidasi pasangan gambar saat manifest diminta.
 
-## Status implementasi
+## Status implementasi dan hasil final test
 
-Notebook mempertahankan EDA/preprocessing partner. Pipeline DDR kini membaca anotasi resmi, menyimpan split bawaan untuk audit, dan menyiapkan split reproduksi 8:1:1 berkelompok SHA-256. Audit yang diberikan pengguna melaporkan 12.422 grup unik, 97 grup duplikat, 9 grup melintasi split resmi, dan nol konflik label pada 12.522 gambar grading; notebook lokal belum dijalankan pada dataset server. ID split eksperimen penulis tidak tersedia. Model tetap kandidat dengan 5.282.101 parameter, berbeda dari 7.262.900 pada Tabel 1 paper (r=16). Training dan evaluasi nyata belum dijalankan.
+Notebook mempertahankan EDA/preprocessing partner, model, pipeline training, evaluasi, dan checkpointing. Pipeline DDR membaca anotasi resmi, menyimpan split bawaan untuk audit, dan membuat split reproduksi 8:1:1 berkelompok SHA-256. Audit yang diberikan pengguna melaporkan 12.422 grup unik, 97 grup duplikat, 9 grup melintasi split resmi, dan nol konflik label pada 12.522 gambar grading. Dataset server tidak diakses dari laptop saat penyusunan laporan ini. ID split penulis tidak tersedia.
+
+Dua hasil **final test** berikut disalin dari JSON eksperimen aktual; angka ini berbeda dari metrik validation yang dipakai untuk memilih checkpoint:
+
+| Dataset | Run | Best epoch dari validation | n test | Test accuracy | Test F1 macro | Test specificity macro |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| APTOS2019 | <code>aptos_main_80ep_seed42</code> | 8 | 366 | 0,724044 | 0,554058 | 0,933978 |
+| DDR | <code>ddr_main_80ep_seed42</code> | 5 | 1.252 | 0,431310 | 0,353457 | 0,857445 |
+
+Tabel lengkap metrik, confusion matrix kedua dataset, dan grafik training APTOS2019 berada di bagian 5-6 <code>CAD_ViT.ipynb</code>. Grafik memakai tepat 43 catatan epoch 1-43 dari log APTOS2019; log tidak membuktikan penyelesaian 80 epoch meskipun nama run memuat <code>80ep</code>. Log training DDR per epoch tidak tersedia, sehingga kurva DDR tidak dibuat. Penurunan validation macro-F1 APTOS2019 tampak pada log, tetapi penyebabnya belum terbukti. Numerical instability DDR yang dilaporkan tidak dapat didiagnosis dari JSON test saja.
+
+Model tetap kandidat reproduksi parsial: 5.282.101 parameter versus 7.262.900 pada Tabel 1 paper (r=16), selisih 1.980.799. AdamW, WeightedRandomSampler, konfigurasi internal arsitektur, dan pemilihan checkpoint dari validation macro-F1 adalah *implementation assumptions*; proses Optuna paper tidak direproduksi. Agregasi F1 paper belum dapat dipastikan identik dengan macro-F1 lima kelas notebook. JSON dan log sumber tetap di luar repository; notebook menyimpan angka, matriks, kurva, serta SHA-256 sumber untuk audit.
 
 ## Menjalankan eksperimen secara manual di GPU KC
 
