@@ -82,6 +82,16 @@ Tabel metrik final test dan dua confusion matrix berbentuk heatmap Matplotlib bi
 
 Model tetap kandidat reproduksi parsial: 5.282.101 parameter versus 7.262.900 pada Tabel 1 paper (r=16), selisih 1.980.799. AdamW, WeightedRandomSampler, konfigurasi internal arsitektur, dan pemilihan checkpoint dari validation macro-F1 adalah *implementation assumptions*; proses Optuna paper tidak direproduksi. Agregasi F1 paper belum dapat dipastikan identik dengan macro-F1 lima kelas notebook. JSON dan log sumber tetap di luar repository; notebook menyimpan angka, matriks, kurva, serta SHA-256 sumber untuk audit.
 
+## Status V1 dan V2
+
+**V1 — Original Reproduction Experiment** mempertahankan preprocessing crop → resize 512×512 (INTER_AREA) → Gaussian smoothing σ=1 (nilai σ asumsi), <code>WeightedRandomSampler</code> pada train, target 80 epoch, dan seluruh hasil historis di bagian 5–6 notebook. Kode, checkpoint, serta metrik V1 tidak ditimpa.
+
+**V2 — Literature-Guided Refinement (Not Yet Trained)** mempertahankan arsitektur <code>CADViTCandidate</code> dan manifest/split V1. Setelah operasi preprocessing CAD-ViT (§III.A, Gbr. 1), V2 menambahkan Ben Graham pada RGB float32: <code>clip(4I − 4GaussianBlur(I, σ=10) + 128, 0, 255)</code>, sebelum augmentasi train dan skala tensor. Bentuk dan σ=10 didukung oleh Pratama et al. (2026), §II.B.2, Pers. (2), Gbr. 2, dalam paper *Ben Graham Retinal Enhancement for Hierarchical Transformer-Based Diabetic Retinopathy Grading* (PDF lokal yang diberikan peneliti); koefisien 4/−4 adalah *implementation assumption* dari konfigurasi yang diberikan peneliti, bukan nilai eksplisit CAD-ViT. V2 tidak memakai CLAHE. Dataset validation/test menerima transformasi deterministik yang sama tanpa augmentasi acak. Pemeriksaan visual perlu dijalankan pada data nyata; risiko halo tepi dan hilangnya lesi kecil masih terbuka. Varians Laplacian yang dilaporkan peneliti dari Colab tidak membuktikan kenaikan akurasi.
+
+V2 memakai shuffle biasa pada train tanpa <code>WeightedRandomSampler</code> atau class weights. Konfigurasi final: 40 epoch (deviasi yang disetujui dari 80 epoch paper), LR 0,000186, batch fisik 16, AdamW weight decay 0, CrossEntropyLoss dari logits, AMP+GradScaler pada CUDA, seed 42, clip gradien norm 1, dan best checkpoint berdasar validation macro-F1. Selain angka eksplisit CAD-ViT, pilihan ini adalah *implementation assumptions*. Tidak ada scheduler, early stopping, atau Optuna ulang. Penjaga V2 memeriksa input, logits, loss, gradien, parameter, validation loss, dan checkpoint; overflow AMP yang teratasi dicatat sebagai skipped step, dengan batas tiga skip beruntun sebagai asumsi diagnostik. Penjaga ini tidak menjamin stabilitas atau performa.
+
+Run baru hanya <code>aptos_v2_bg10_stable_40ep_seed42</code> dan <code>ddr_v2_bg10_stable_40ep_seed42</code>. Keduanya belum dilatih: **tidak ada metrik, checkpoint, atau grafik V2**. Model belum dibuktikan setara arsitektur paper; kandidat V1 memiliki 5.282.101 parameter vs 7.262.900 pada Tabel 1. Kode V2 menolak perubahan jumlah parameter tak diaudit. Matriks audit literatur ada di §4.6 notebook.
+
 ## Menjalankan eksperimen secara manual di GPU KC
 
 Semua edit dilakukan di laptop lokal. Setelah notebook direview dan disalin ke server dengan cara manual yang dipilih peneliti, jalankan hanya kode notebook biasa; jangan memasang atau menjalankan Codex/agentic tools di server. Dari terminal server, folder kerja awal:
@@ -98,5 +108,23 @@ Ganti `CAD_VIT_DATA_ROOT` dengan lokasi dataset **yang benar-benar ada** dan ber
 Untuk APTOS, gunakan `prepare_manifest("APTOS2019")` setelah preflight sukses. Untuk DDR, gunakan `prepare_manifest("DDR")` setelah direktori DR_grading resmi tersedia; CSV mapping manual tidak diperlukan. Fungsi ini mempertahankan 12.522 gambar berlabel 0–4, mencatat keanggotaan split train/valid/test resmi dalam manifest/metadata, lalu membuat split reproduksi 8:1:1 dengan seed 42 dan grup SHA-256 agar gambar identik tidak melintasi split. Manifest disimpan di luar repo dan tidak ditimpa bila fingerprint berubah.
 
 Target paper ialah 512×512, LR 0,000186, batch 16, 80 epoch, dan attention reduction ratio 16 (§IV.B). Pada RTX 3060 12 GB, opsi `physical_batch_size=4, accumulation=4, amp=True` mempertahankan batch efektif nominal 16, tetapi bukan eksekusi yang identik dengan batch fisik 16. Catat setiap deviasi dalam konfigurasi run. Contoh pemanggilan dan smoke test data nyata ada di bagian 5 notebook. Evaluasi test dipanggil terpisah setelah pemilihan model berdasarkan validation set selesai.
+
+Untuk V2, jalankan cell definisi secara berurutan di notebook. Contoh berikut adalah **perintah Python di cell Jupyter**, belum dijalankan pada data server:
+
+~~~python
+aptos_manifest_path = prepare_manifest("APTOS2019")
+ddr_manifest_path = prepare_manifest("DDR")
+preview_v2_preprocessing(aptos_manifest_path, "APTOS2019")
+preview_v2_preprocessing(ddr_manifest_path, "DDR")
+smoke_v2_real_batch(aptos_manifest_path, "APTOS2019")
+smoke_v2_real_batch(ddr_manifest_path, "DDR")
+run_experiment_v2(v2_experiment_config("APTOS2019"), aptos_manifest_path,
+                  V2_RUN_NAMES["APTOS2019"])
+run_experiment_v2(v2_experiment_config("DDR"), ddr_manifest_path,
+                  V2_RUN_NAMES["DDR"])
+~~~
+
+Periksa output visual dan smoke sebelum memulai training 40 epoch. <code>run_experiment_v2</code> default tidak melakukan resume, dan hanya menerima nama run V2 yang baru. Bila sebuah run V2 telah ada, fungsi menolak overwrite. Resume harus dipilih manual dengan <code>resume=True</code> dan record manifest/config yang sama; <code>last.pt</code> V1 DDR tidak dipakai. Jika VRAM tidak cukup untuk batch fisik 16, hentikan dan dokumentasikan deviasi sebelum mengubah konfigurasi; jalur V2 final sengaja mengunci batch fisik 16. Jangan memanggil <code>evaluate_test</code> untuk V2 sebelum training dan validasi checkpoint selesai.
+
 
 Dependensi runtime tambahan yang perlu dipastikan tersedia: `torchvision` yang cocok dengan versi PyTorch, `Pillow`, `numpy`, dan `jupyter`; `torch`, `pandas`, `opencv-python`/`opencv-python-headless`, `scikit-learn`, `matplotlib`, `seaborn`, serta `wandb` juga dipakai notebook. Jangan menyimpan token W&B di notebook atau repository. Mode W&B default `offline`; mode `online` memerlukan autentikasi melalui environment atau mekanisme login manual yang aman.
