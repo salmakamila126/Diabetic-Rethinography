@@ -82,6 +82,16 @@ Tabel metrik final test dan dua confusion matrix berbentuk heatmap Matplotlib bi
 
 Model tetap kandidat reproduksi parsial: 5.282.101 parameter versus 7.262.900 pada Tabel 1 paper (r=16), selisih 1.980.799. AdamW, WeightedRandomSampler, konfigurasi internal arsitektur, dan pemilihan checkpoint dari validation macro-F1 adalah *implementation assumptions*; proses Optuna paper tidak direproduksi. Agregasi F1 paper belum dapat dipastikan identik dengan macro-F1 lima kelas notebook. JSON dan log sumber tetap di luar repository; notebook menyimpan angka, matriks, kurva, serta SHA-256 sumber untuk audit.
 
+## Status V1 dan V2
+
+**V1 — Original Reproduction Experiment** mempertahankan preprocessing crop → resize 512×512 (INTER_AREA) → Gaussian smoothing σ=1 (nilai σ asumsi), <code>WeightedRandomSampler</code> pada train, target 80 epoch, dan seluruh hasil historis di bagian 5–6 notebook. Kode, checkpoint, serta metrik V1 tidak ditimpa.
+
+**V2 — Literature-Guided Refinement (Training Completed; Final Test Pending)** mempertahankan arsitektur <code>CADViTCandidate</code> dan manifest/split V1. Setelah operasi preprocessing CAD-ViT (§III.A, Gbr. 1), V2 menambahkan Ben Graham pada RGB float32: <code>clip(4I − 4GaussianBlur(I, σ=10) + 128, 0, 255)</code>, sebelum augmentasi train dan skala tensor. Bentuk dan σ=10 didukung Pratama et al. (2026), §II.B.2, Pers. (2), Gbr. 2, dalam paper *Ben Graham Retinal Enhancement for Hierarchical Transformer-Based Diabetic Retinopathy Grading*; koefisien 4/−4 adalah *implementation assumption* peneliti, bukan nilai eksplisit CAD-ViT. V2 tidak memakai CLAHE atau <code>WeightedRandomSampler</code>. Grafik APTOS lokal baru pada §2 notebook menunjukkan halo berwarna pada tiga contoh V2; dampaknya pada klasifikasi belum terbukti.
+
+**Hasil training V2 dari log asli di luar repository:** APTOS2019 <code>aptos_v2_bg10_stable_65ep_seed42</code> lengkap epoch 1–65; best validation macro-F1 **0,650653821679372** pada epoch 65, validation accuracy 0,8142076502732241. DDR <code>ddr_v2_bg10_stable_30ep_seed42</code> lengkap epoch 1–30; best validation macro-F1 **0,5877264724487317** pada epoch 24, validation accuracy 0,8035143769968051; final epoch 30 macro-F1 0,5127013785813619. Log APTOS mencatat 10 skipped optimizer steps AMP, DDR 15; semua metrik tercatat finite. SHA-256 log dan seluruh metrik per epoch tertanam di §5.7–5.8 notebook bersama grafik yang terlihat di GitHub. **Ini metrik validation, bukan final test.** Peneliti melaporkan pemeriksaan checkpoint APTOS <code>best.pt</code>/<code>last.pt</code>: indeks epoch 64, 285 tensor model, nol non-finite; checkpoint tidak dibuka ulang secara lokal. File checkpoint/config DDR dilaporkan tersedia di GPU lab, tetapi isinya belum diperiksa. Evaluasi final test V2 masih pending.
+
+Durasi aktual V2 **65 epoch APTOS2019 dan 30 epoch DDR** adalah deviasi karena keterbatasan sumber daya dari 80 epoch CAD-ViT (§IV.B). LR 0,000186, batch fisik 16, input 512×512, r=16, dan split 8:1:1 tetap target konfigurasi paper dalam kode. AdamW weight decay 0, CrossEntropyLoss, AMP+GradScaler, seed 42, clipping gradien norm 1, tanpa scheduler/early stopping, serta checkpoint menurut validation macro-F1 adalah *implementation assumptions*. Tidak ada Optuna ulang. Model tetap kandidat reproduksi parsial: 5.282.101 parameter vs 7.262.900 pada Tabel 1 paper. Perbandingan angka paper dan V1/V2 yang membedakan test dari validation ada di §6.8 notebook. Dua hasil final test V1 di atas tetap historis dan tidak diubah.
+
 ## Menjalankan eksperimen secara manual di GPU KC
 
 Semua edit dilakukan di laptop lokal. Setelah notebook direview dan disalin ke server dengan cara manual yang dipilih peneliti, jalankan hanya kode notebook biasa; jangan memasang atau menjalankan Codex/agentic tools di server. Dari terminal server, folder kerja awal:
@@ -98,5 +108,23 @@ Ganti `CAD_VIT_DATA_ROOT` dengan lokasi dataset **yang benar-benar ada** dan ber
 Untuk APTOS, gunakan `prepare_manifest("APTOS2019")` setelah preflight sukses. Untuk DDR, gunakan `prepare_manifest("DDR")` setelah direktori DR_grading resmi tersedia; CSV mapping manual tidak diperlukan. Fungsi ini mempertahankan 12.522 gambar berlabel 0–4, mencatat keanggotaan split train/valid/test resmi dalam manifest/metadata, lalu membuat split reproduksi 8:1:1 dengan seed 42 dan grup SHA-256 agar gambar identik tidak melintasi split. Manifest disimpan di luar repo dan tidak ditimpa bila fingerprint berubah.
 
 Target paper ialah 512×512, LR 0,000186, batch 16, 80 epoch, dan attention reduction ratio 16 (§IV.B). Pada RTX 3060 12 GB, opsi `physical_batch_size=4, accumulation=4, amp=True` mempertahankan batch efektif nominal 16, tetapi bukan eksekusi yang identik dengan batch fisik 16. Catat setiap deviasi dalam konfigurasi run. Contoh pemanggilan dan smoke test data nyata ada di bagian 5 notebook. Evaluasi test dipanggil terpisah setelah pemilihan model berdasarkan validation set selesai.
+
+Untuk V2, jalankan cell definisi secara berurutan di notebook. Contoh berikut adalah **perintah Python di cell Jupyter**, belum dijalankan pada data server:
+
+~~~python
+aptos_manifest_path = prepare_manifest("APTOS2019")
+ddr_manifest_path = prepare_manifest("DDR")
+preview_v2_preprocessing(aptos_manifest_path, "APTOS2019")
+preview_v2_preprocessing(ddr_manifest_path, "DDR")
+smoke_v2_real_batch(aptos_manifest_path, "APTOS2019")
+smoke_v2_real_batch(ddr_manifest_path, "DDR")
+run_experiment_v2(v2_experiment_config("APTOS2019"), aptos_manifest_path,
+                  V2_RUN_NAMES["APTOS2019"])
+run_experiment_v2(v2_experiment_config("DDR"), ddr_manifest_path,
+                  V2_RUN_NAMES["DDR"])
+~~~
+
+Contoh pemanggilan di atas adalah dokumentasi reproduksi; kedua run V2 yang tercatat telah selesai, sehingga jangan menjalankannya ulang dengan nama run yang sama. <code>run_experiment_v2</code> default tidak melakukan resume, dan hanya menerima nama run V2 yang baru. Bila sebuah run V2 telah ada, fungsi menolak overwrite. Resume harus dipilih manual dengan <code>resume=True</code> dan record manifest/config yang sama; <code>last.pt</code> V1 DDR tidak dipakai. Jika VRAM tidak cukup untuk batch fisik 16, hentikan dan dokumentasikan deviasi sebelum mengubah konfigurasi; jalur V2 final sengaja mengunci batch fisik 16. Final test V2 belum dilakukan; verifikasi checkpoint DDR terlebih dahulu dan pertahankan test set terpisah dari pemilihan model. Fungsi <code>evaluate_test()</code> lama masih mengunci indeks epoch 39 sehingga tidak cocok untuk run 65/30; prosedur baru dengan guard <code>RUN_V2_FINAL_TEST = False</code> ada di §6.7 notebook. Jangan mengaktifkan guard sebelum checkpoint dan manifest ditinjau.
+
 
 Dependensi runtime tambahan yang perlu dipastikan tersedia: `torchvision` yang cocok dengan versi PyTorch, `Pillow`, `numpy`, dan `jupyter`; `torch`, `pandas`, `opencv-python`/`opencv-python-headless`, `scikit-learn`, `matplotlib`, `seaborn`, serta `wandb` juga dipakai notebook. Jangan menyimpan token W&B di notebook atau repository. Mode W&B default `offline`; mode `online` memerlukan autentikasi melalui environment atau mekanisme login manual yang aman.
