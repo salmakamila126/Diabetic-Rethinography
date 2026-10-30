@@ -1,0 +1,15 @@
+# Raw datasets and local experiment artifacts stay outside the repository.
+datasets/
+APTOS2019/
+DDR/
+cad_vit_runs/
+wandb/
+*.pt
+*.pth
+*.ckpt
+
+# Local credentials and environment files.
+.env
+.env.*
+*.pem
+*.key
