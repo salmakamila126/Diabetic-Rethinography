@@ -1,6 +1,6 @@
 # CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging
 
-Reproduksi penelitian [CAD-ViT (2025)](https://ieeexplore.ieee.org/document/11009024) dalam satu notebook utama, **CAD_ViT.ipynb**. Notebook mempertahankan EDA dan demonstrasi preprocessing partner. Output EDA yang tersimpan adalah hasil historis dari sumber data lama; jalankan ulang setelah validasi dataset resmi sebelum mengutipnya sebagai hasil reproduksi.
+Reproduksi penelitian [CAD-ViT (2025)](https://ieeexplore.ieee.org/document/11009024) dalam satu notebook utama, **CAD_ViT.ipynb**. Notebook menyatukan EDA, preprocessing, pengembangan model, training, dan evaluasi sebagai satu workflow penelitian tim. Output EDA historis pada §2.2 berasal dari eksekusi yang belum dapat ditautkan secara pasti ke dataset resmi dan manifest training V2; grafik APTOS2019 lokal pada §2.3 memakai pasangan label–gambar yang diverifikasi secara terpisah. Interpretasikan kedua kelompok output sesuai provenance masing-masing.
 
 ## Sumber dataset
 
@@ -69,7 +69,7 @@ Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya
 
 ## Status implementasi dan hasil final test
 
-Notebook mempertahankan EDA/preprocessing partner, model, pipeline training, evaluasi, dan checkpointing. Pipeline DDR membaca anotasi resmi, menyimpan split bawaan untuk audit, dan membuat split reproduksi 8:1:1 berkelompok SHA-256. Audit yang diberikan pengguna melaporkan 12.422 grup unik, 97 grup duplikat, 9 grup melintasi split resmi, dan nol konflik label pada 12.522 gambar grading. Dataset server tidak diakses dari laptop saat penyusunan laporan ini. ID split penulis tidak tersedia.
+Notebook mencakup EDA dan preprocessing sebagai tahapan terpadu bersama model, training, evaluasi, dan checkpointing. Grafik EDA historis §2.2 merangkum subset 500 gambar bertanda APTOS dan 500 bertanda DDR, tetapi sumber file serta keanggotaannya dalam manifest V2 belum terverifikasi. EDA lokal §2.3 memverifikasi distribusi kelas dari 3.662 pasangan APTOS2019 dan meninjau karakteristik 60 gambar; tidak ada distribusi kelas DDR lokal yang diukur pada bagian itu. Pipeline DDR membaca anotasi resmi, menyimpan split bawaan untuk audit, dan membuat split reproduksi 8:1:1 berkelompok SHA-256. Audit yang diberikan pengguna melaporkan 12.422 grup unik, 97 grup duplikat, 9 grup melintasi split resmi, dan nol konflik label pada 12.522 gambar grading. Dataset server tidak diakses dari laptop saat penyusunan laporan ini. ID split penulis tidak tersedia.
 
 Dua hasil **final test** berikut disalin dari JSON eksperimen aktual; angka ini berbeda dari metrik validation yang dipakai untuk memilih checkpoint:
 
