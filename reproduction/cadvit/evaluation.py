@@ -226,8 +226,11 @@ def preflight(artifact_root, dataset, dataset_root=None, trust_checkpoints=False
     manifest = validate_manifest(manifest_path, dataset, dataset_root, expected_sha)
     checkpoint = validate_checkpoint_pair(best, last, dataset, manifest["sha256"])
     config_path = run_dir / "config.json"
-    if config_path.is_file() and json.loads(config_path.read_text(encoding="utf-8")) != record:
-        raise ValueError("config.json run berbeda dari checkpoint")
+    if config_path.is_file():
+        saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+        normalized_record = json.loads(json.dumps(record))
+        if saved_config != normalized_record:
+            raise ValueError("config.json run berbeda dari checkpoint")
     if dataset == "DDR":
         recovery_path = run_dir / "recovery_config.json"
         if not recovery_path.is_file():
