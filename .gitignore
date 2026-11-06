@@ -4,6 +4,9 @@ APTOS2019/
 DDR/
 cad_vit_runs/
 wandb/
+preprocessing_audit_outputs/
+__pycache__/
+*.py[cod]
 *.pt
 *.pth
 *.ckpt
