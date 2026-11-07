@@ -26,6 +26,9 @@ from reproduction.cadvit.model import (ARCH_CONFIG, CADViTCandidate,
 
 
 CAMPAIGN = "cadvit_tables_1_5_paper_v1"
+BALANCED_CAMPAIGN = "cadvit_tables_1_5_balanced_v1"
+CAMPAIGNS = {"paper_v1": CAMPAIGN, "balanced_v1": BALANCED_CAMPAIGN}
+BALANCED_TRAINING = "train_oversample_uniform"
 MODEL_SOURCE = Path(__file__).with_name("model.py")
 PREPROCESS_SOURCE = Path(__file__).with_name("preprocessing.py")
 
@@ -56,7 +59,7 @@ class Protocol:
                 or self.accumulation < 1
                 or self.micro_batch_size * self.accumulation != 16
                 or self.preprocessing != "paper_described_historical_v1"
-                or not self.augment_train or self.balancing != "none"
+                or not self.augment_train or self.balancing not in {"none", BALANCED_TRAINING}
                 or self.optimizer != "AdamW" or self.weight_decay != 0.0
                 or self.loss != "CrossEntropyLoss" or self.grad_clip_norm != 1.0
                 or self.checkpoint_metric != "validation_macro_f1"
@@ -221,64 +224,138 @@ def binary_metrics(y_true, y_pred):
         classes[name] = {"support": tp + fn, "precision": precision, "recall": recall,
                          "specificity": specificity, "f1": f1,
                          "one_vs_rest_accuracy": (tp + tn) / n}
-    return {"n": n, "accuracy": (cm[0][0] + cm[1][1]) / n,
+    accuracy = (cm[0][0] + cm[1][1]) / n
+    return {"n": n, "accuracy": accuracy,
+            "precision_macro": sum(x["precision"] for x in classes.values()) / 2,
+            "recall_macro": sum(x["recall"] for x in classes.values()) / 2,
             "f1_macro": sum(x["f1"] for x in classes.values()) / 2,
+            "f1_micro": accuracy,
             "specificity_macro": sum(x["specificity"] for x in classes.values()) / 2,
+            **{f"{name}_weighted": sum(x["support"] * x[name] for x in classes.values()) / n
+               for name in ("precision", "recall", "f1", "specificity")},
             "confusion_matrix": cm, "per_class": classes,
             "orientation": "rows=true No DR,DR; columns=predicted No DR,DR"}
 
 
-def campaign_root(artifact_root):
+def support_weighted_metrics(metrics):
+    """Five-class support-weighted metrics; checkpoint selection stays macro-F1."""
+    report = metrics["per_class"]
+    support = sum(report[str(label)]["support"] for label in range(5))
+    if support != metrics["n"] or support < 1:
+        raise ValueError("Class support and sample count disagree")
+    result = {}
+    for name in ("precision", "recall", "f1", "specificity"):
+        values = [(report[str(label)]["support"], report[str(label)][name])
+                  for label in range(5)]
+        if any(value is None for _, value in values):
+            raise ValueError(f"Undefined per-class {name}; weighted comparison unavailable")
+        result[f"{name}_weighted"] = sum(weight * value for weight, value in values) / support
+    return result
+
+
+def campaign_root(artifact_root, campaign="paper_v1"):
+    if campaign not in CAMPAIGNS:
+        raise ValueError("Unknown campaign")
     root = Path(artifact_root).expanduser().resolve()
     repo = Path(__file__).resolve().parents[2]
     if root == repo or repo in root.parents:
         raise ValueError("Artifact root must be outside Git repository")
-    return root / "experiments" / CAMPAIGN
+    return root / "experiments" / CAMPAIGNS[campaign]
 
 
-def protocol_path(artifact_root):
-    return campaign_root(artifact_root) / "protocol.json"
+def protocol_path(artifact_root, campaign="paper_v1"):
+    return campaign_root(artifact_root, campaign) / "protocol.json"
 
 
-def create_protocol(artifact_root, micro_batch_size=16):
+def create_protocol(artifact_root, micro_batch_size=16, campaign="paper_v1"):
     if micro_batch_size < 1 or 16 % micro_batch_size:
         raise ValueError("Micro batch must divide effective batch 16")
+    if campaign not in CAMPAIGNS:
+        raise ValueError("Unknown campaign")
     protocol = replace(Protocol(), micro_batch_size=micro_batch_size,
-                       accumulation=16 // micro_batch_size)
+                       accumulation=16 // micro_batch_size,
+                       balancing=BALANCED_TRAINING if campaign == "balanced_v1" else "none")
     protocol.validate()
-    path = protocol_path(artifact_root)
+    path = protocol_path(artifact_root, campaign)
     path.parent.mkdir(parents=True, exist_ok=True)
+    content = {"protocol": asdict(protocol), "classification":
+               "paper-guided implementation assumptions; BG10 excluded"}
+    if campaign == "balanced_v1":
+        content.update({"campaign": campaign, "balancing_assumption":
+                        "train-only deterministic oversampling to the largest class; "
+                        "geometric augmentation on each draw; validation/test unchanged"})
     with path.open("x", encoding="utf-8") as stream:
-        json.dump({"protocol": asdict(protocol), "classification":
-                   "paper-guided implementation assumptions; BG10 excluded"}, stream, indent=2)
+        json.dump(content, stream, indent=2)
     return path
 
 
-def load_protocol(artifact_root):
-    path = protocol_path(artifact_root)
+def load_protocol(artifact_root, campaign="paper_v1"):
+    path = protocol_path(artifact_root, campaign)
     content = json.loads(path.read_text(encoding="utf-8"))
     protocol = Protocol(**content["protocol"])
     protocol.validate()
+    expected_balance = BALANCED_TRAINING if campaign == "balanced_v1" else "none"
+    if protocol.balancing != expected_balance or (campaign == "balanced_v1" and content.get("campaign") != campaign):
+        raise ValueError("Balancing protocol does not match campaign identity")
     return protocol, file_sha256(path)
 
 
-def artifact_paths(artifact_root, variant, data_root=None):
+def artifact_paths(artifact_root, variant, data_root=None, campaign="paper_v1"):
     root = Path(artifact_root).expanduser().resolve()
     dataset_root = (Path(data_root).expanduser().resolve() if data_root
                     else root / "datasets" / variant.dataset)
     return {"manifest": root / "cad_vit_runs" / "manifests" / f"{variant.dataset}_seed42.csv",
             "dataset_root": dataset_root,
-            "run_dir": campaign_root(root) / variant.name}
+            "run_dir": campaign_root(root, campaign) / variant.name}
 
 
-def preflight(artifact_root, variant_name, data_root=None):
+def _training_groups(rows, task):
+    """Index only train records; binary labels are 0 versus original labels 1--4."""
+    if task not in {"five_class", "binary_head"}:
+        raise ValueError("Unknown classification task")
+    train_rows = [row for row in rows if row["split"] == "train"]
+    groups = {label: [] for label in range(2 if task == "binary_head" else 5)}
+    for index, row in enumerate(train_rows):
+        label = int(row["label"])
+        if not 0 <= label <= 4:
+            raise ValueError("Label outside five-class manifest")
+        groups[int(label > 0) if task == "binary_head" else label].append(index)
+    if not train_rows or any(not indices for indices in groups.values()):
+        raise ValueError("Every training class must be represented")
+    return groups
+
+
+def training_class_counts(rows, task, balancing):
+    groups = _training_groups(rows, task)
+    before = {str(label): len(indices) for label, indices in groups.items()}
+    target = max(before.values()) if balancing == BALANCED_TRAINING else None
+    after = {label: target if target is not None else count for label, count in before.items()}
+    return before, after
+
+
+def balanced_train_indices(rows, task, seed, epoch):
+    """Deterministic train-only oversampling; no validation/test record is sampled."""
+    if epoch < 0:
+        raise ValueError("Epoch must be nonnegative")
+    groups = _training_groups(rows, task)
+    rng = random.Random(seed + epoch)
+    target = max(len(indices) for indices in groups.values())
+    order = []
+    for indices in groups.values():
+        order.extend(indices)
+        order.extend(rng.choice(indices) for _ in range(target - len(indices)))
+    rng.shuffle(order)
+    return order
+
+
+def preflight(artifact_root, variant_name, data_root=None, campaign="paper_v1"):
     """Read metadata only; neither train nor test image is opened."""
     if variant_name not in VARIANTS:
         raise ValueError("Unknown variant")
     validate_variant_matrix()
     variant = VARIANTS[variant_name]
-    protocol, protocol_sha = load_protocol(artifact_root)
-    paths = artifact_paths(artifact_root, variant, data_root)
+    protocol, protocol_sha = load_protocol(artifact_root, campaign)
+    paths = artifact_paths(artifact_root, variant, data_root, campaign)
     manifest = paths["manifest"]
     checked = validate_manifest(manifest, variant.dataset, paths["dataset_root"],
                                 file_sha256(manifest))
@@ -291,8 +368,10 @@ def preflight(artifact_root, variant_name, data_root=None):
             dependencies[name] = False
     if not all(dependencies.values()):
         raise RuntimeError(f"Runtime dependencies missing; no installation performed: {dependencies}")
-    return {"variant": variant.name, "dataset": variant.dataset, "task": variant.task,
+    before, after = training_class_counts(checked["rows"], variant.task, protocol.balancing)
+    return {"campaign": campaign, "variant": variant.name, "dataset": variant.dataset, "task": variant.task,
             "manifest_sha256": checked["sha256"], "split_sizes": checked["split_sizes"],
+            "train_class_counts_before": before, "train_class_counts_after": after,
             "protocol_sha256": protocol_sha, "model_sha256": file_sha256(MODEL_SOURCE),
             "preprocessing_sha256": file_sha256(PREPROCESS_SOURCE),
             "run_dir": str(paths["run_dir"]), "dataset_root": str(paths["dataset_root"]),
@@ -343,14 +422,18 @@ def split_loader(rows, root, split, task, protocol, epoch=0):
     if split not in {"train", "val", "test"}:
         raise ValueError("Unknown split")
     generator = torch.Generator().manual_seed(protocol.seed + epoch)
+    sampler = (balanced_train_indices(rows, task, protocol.seed, epoch)
+               if split == "train" and protocol.balancing == BALANCED_TRAINING else None)
     return DataLoader(dataset_for(rows, root, split, task, protocol.augment_train),
-                      batch_size=protocol.micro_batch_size, shuffle=split == "train",
+                      batch_size=protocol.micro_batch_size,
+                      shuffle=split == "train" and sampler is None, sampler=sampler,
                       num_workers=0, generator=generator, pin_memory=torch.cuda.is_available())
 
 
-def score(model, loader, device, task):
+def score(model, loader, device, task, collect_predictions=False):
     model.eval()
     truth, predicted, loss_sum, count = [], [], 0.0, 0
+    details = []
     criterion = nn.CrossEntropyLoss()
     with torch.inference_mode():
         for x, y in loader:
@@ -365,12 +448,24 @@ def score(model, loader, device, task):
             loss_sum += float(loss) * len(y)
             count += len(y)
             truth.extend(int(v) for v in y.tolist())
-            predicted.extend(int(v) for v in logits.argmax(1).cpu().tolist())
+            batch_predictions = logits.argmax(1).cpu().tolist()
+            predicted.extend(int(v) for v in batch_predictions)
+            if collect_predictions:
+                confidence = logits.softmax(1).max(1).values.cpu().tolist()
+                details.extend({"true_label": int(actual), "predicted_label": int(prediction),
+                                "confidence": float(probability)}
+                               for actual, prediction, probability in zip(y.tolist(),
+                                                                           batch_predictions, confidence))
     if not count:
         raise ValueError("Evaluation split empty")
     metrics = (binary_metrics(truth, predicted) if task == "binary_head"
                else classification_metrics(truth, predicted))
+    if task == "five_class":
+        metrics.update(support_weighted_metrics(metrics))
+        metrics["f1_micro"] = metrics["accuracy"]
     metrics["loss"] = loss_sum / count
+    if collect_predictions:
+        metrics["predictions"] = details
     return metrics
 
 
@@ -379,6 +474,7 @@ def train_epoch(model, loader, optimizer, scaler, device, protocol):
     criterion = nn.CrossEntropyLoss()
     optimizer.zero_grad(set_to_none=True)
     n, loss_sum, skipped, consecutive_skips = 0, 0.0, 0, 0
+    samples_in_epoch = len(loader.sampler)
     amp_enabled = protocol.amp and device.type == "cuda"
     for step, (x, y) in enumerate(loader):
         x, y = x.to(device), y.to(device)
@@ -389,7 +485,7 @@ def train_epoch(model, loader, optimizer, scaler, device, protocol):
             raise FloatingPointError("Nonfinite training loss")
         window_start = (step // protocol.accumulation) * protocol.accumulation
         window_end = min(window_start + protocol.accumulation, len(loader))
-        window_examples = min(len(loader.dataset) - window_start * protocol.micro_batch_size,
+        window_examples = min(samples_in_epoch - window_start * protocol.micro_batch_size,
                               (window_end - window_start) * protocol.micro_batch_size)
         scaler.scale(loss * (len(y) / window_examples)).backward()
         loss_sum += float(loss) * len(y)
@@ -417,7 +513,7 @@ def train_epoch(model, loader, optimizer, scaler, device, protocol):
         else:
             consecutive_skips = 0
         optimizer.zero_grad(set_to_none=True)
-    if n != len(loader.dataset):
+    if n != samples_in_epoch:
         raise ValueError("Training epoch incomplete")
     return {"loss": loss_sum / n, "skipped_optimizer_steps": skipped}
 
@@ -435,11 +531,14 @@ def _read_history(path):
         return [json.loads(line) for line in stream if line.strip()]
 
 
-def train(artifact_root, variant_name, data_root=None, resume=False):
+def train(artifact_root, variant_name, data_root=None, resume=False,
+          campaign="paper_v1", max_epochs_per_invocation=None):
     """Manual GPU/CPU training; never instantiates or reads the test split."""
-    report = preflight(artifact_root, variant_name, data_root)
+    if max_epochs_per_invocation is not None and max_epochs_per_invocation < 1:
+        raise ValueError("Pilot epoch limit must be positive")
+    report = preflight(artifact_root, variant_name, data_root, campaign)
     variant = VARIANTS[variant_name]
-    protocol, _ = load_protocol(artifact_root)
+    protocol, _ = load_protocol(artifact_root, campaign)
     run_dir = Path(report["run_dir"])
     record = {"variant": asdict(variant), "model_config": variant.model_config(),
               "protocol": asdict(protocol), "protocol_sha256": report["protocol_sha256"],
@@ -447,6 +546,11 @@ def train(artifact_root, variant_name, data_root=None, resume=False):
               "model_sha256": report["model_sha256"],
               "preprocessing_sha256": report["preprocessing_sha256"],
               "paper": "10.1109/ACCESS.2025.3572455; candidate architecture; assumptions documented"}
+    if campaign == "balanced_v1":
+        record.update({"campaign": campaign,
+                       "runner_sha256": file_sha256(Path(__file__)),
+                       "train_class_counts_before": report["train_class_counts_before"],
+                       "train_class_counts_after": report["train_class_counts_after"]})
     record = json.loads(json.dumps(record))  # tuple stage widths become stable JSON lists
     if resume:
         if not run_dir.is_dir():
@@ -491,7 +595,8 @@ def train(artifact_root, variant_name, data_root=None, resume=False):
     if device.type == "cuda":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    for epoch in range(start, protocol.epochs):
+    end = min(protocol.epochs, start + max_epochs_per_invocation) if max_epochs_per_invocation else protocol.epochs
+    for epoch in range(start, end):
         start_time = time.monotonic()
         train_loader = split_loader(rows, report["dataset_root"], "train", variant.task,
                                     protocol, epoch)
@@ -508,6 +613,8 @@ def train(artifact_root, variant_name, data_root=None, resume=False):
                  "val_macro_f1": val["f1_macro"],
                  "val_macro_specificity": val["specificity_macro"],
                  "epoch_seconds": time.monotonic() - start_time}
+        if campaign == "balanced_v1":
+            entry["train_class_counts_after"] = report["train_class_counts_after"]
         state = {"epoch": epoch, "model": model.state_dict(),
                  "optimizer": optimizer.state_dict(), "scaler": scaler.state_dict(),
                  "record": record, "best_f1": best_f1, "best_loss": best_loss,
@@ -523,11 +630,11 @@ def train(artifact_root, variant_name, data_root=None, resume=False):
     return run_dir
 
 
-def final_test(artifact_root, variant_name, data_root=None):
+def final_test(artifact_root, variant_name, data_root=None, campaign="paper_v1"):
     """Manual one-time test; never used to select variants or checkpoints."""
-    report = preflight(artifact_root, variant_name, data_root)
+    report = preflight(artifact_root, variant_name, data_root, campaign)
     variant = VARIANTS[variant_name]
-    protocol, _ = load_protocol(artifact_root)
+    protocol, _ = load_protocol(artifact_root, campaign)
     run_dir = Path(report["run_dir"])
     result_path = run_dir / "test_metrics.json"
     if result_path.exists():
@@ -552,26 +659,41 @@ def final_test(artifact_root, variant_name, data_root=None):
     model = CADViTCandidate(variant.model_config()).to(device)
     model.load_state_dict(state["model"], strict=True)
     metrics = score(model, split_loader(rows, report["dataset_root"], "test",
-                                        variant.task, protocol), device, variant.task)
+                                        variant.task, protocol), device, variant.task,
+                    collect_predictions=True)
+    test_rows = [row for row in rows if row["split"] == "test"]
+    if len(metrics["predictions"]) != len(test_rows):
+        raise ValueError("Prediction metadata and frozen test manifest disagree")
+    for prediction, row in zip(metrics["predictions"], test_rows):
+        expected = int(row["label"])
+        if variant.task == "binary_head":
+            expected = int(expected > 0)
+        if prediction["true_label"] != expected:
+            raise ValueError("Prediction order differs from test manifest")
+        prediction.update({"image_id": row["image_id"],
+                           "image_path": row["image_path"],
+                           "image_sha256": row["sha256"]})
     payload = {"dataset": variant.dataset, "variant": variant.name, "split": "test",
                "selected_epoch": best["epoch"], "selection": "validation_macro_f1",
                "manifest_sha256": report["manifest_sha256"],
                "protocol_sha256": report["protocol_sha256"],
                "model_sha256": report["model_sha256"], "metrics": metrics}
+    if campaign == "balanced_v1":
+        payload["campaign"] = campaign
     with result_path.open("x", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2)
     return payload
 
 
-def comparison_rows(dataset, result_path, artifact_root):
+def comparison_rows(dataset, result_path, artifact_root, campaign="paper_v1"):
     """Paper rows are quoted, never represented as rerun third-party work."""
     payload = json.loads(Path(result_path).read_text(encoding="utf-8"))
     required_variant = "aptos_r16" if dataset == "APTOS2019" else "ddr_full"
-    run_dir = campaign_root(artifact_root) / required_variant
+    run_dir = campaign_root(artifact_root, campaign) / required_variant
     if Path(result_path).resolve() != (run_dir / "test_metrics.json").resolve():
         raise ValueError("Comparison requires the controlled run result path")
     record = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
-    _, current_protocol_sha = load_protocol(artifact_root)
+    _, current_protocol_sha = load_protocol(artifact_root, campaign)
     if (record.get("variant") != asdict(VARIANTS[required_variant])
             or record.get("protocol_sha256") != current_protocol_sha
             or record.get("manifest_sha256") != payload.get("manifest_sha256")
@@ -581,52 +703,87 @@ def comparison_rows(dataset, result_path, artifact_root):
             or payload.get("split") != "test" or not payload.get("manifest_sha256")
             or not payload.get("protocol_sha256")):
         raise ValueError("Result provenance differs from controlled full-model run")
+    if campaign == "balanced_v1" and (record.get("campaign") != campaign or payload.get("campaign") != campaign):
+        raise ValueError("Balanced result lacks campaign provenance")
     metrics = payload["metrics"]
-    own = ("Independent candidate, not author architecture", 2026,
-           100 * metrics["accuracy"], 100 * metrics["specificity_macro"],
-           100 * metrics["precision_macro"], 100 * metrics["recall_macro"],
-           100 * metrics["f1_macro"])
+    weighted = support_weighted_metrics(metrics)
+    own = ("Independent candidate (support-weighted; architecture differs)", 2026,
+           100 * metrics["accuracy"], 100 * weighted["specificity_weighted"],
+           100 * weighted["precision_weighted"], 100 * weighted["recall_weighted"],
+           100 * weighted["f1_weighted"])
     return [dict(zip(("method", "year", "accuracy", "specificity", "precision", "recall", "f1"), row))
             for row in PAPER_COMPARISONS[dataset] + [own]]
 
 
-def matrix(artifact_root=None):
+def matrix(artifact_root=None, campaign="paper_v1"):
     result = []
     for table, names in TABLES.items():
         for name in names:
-            status = "missing" if artifact_root is None or not protocol_path(artifact_root).is_file() else "needs-training"
+            status = "missing" if artifact_root is None or not protocol_path(artifact_root, campaign).is_file() else "needs-training"
             if artifact_root is not None:
-                run_dir = campaign_root(artifact_root) / name
+                run_dir = campaign_root(artifact_root, campaign) / name
                 if (run_dir / "test_metrics.json").is_file():
                     status = "needs-validation"  # metadata still must be checked
                 elif (run_dir / "last.pt").is_file():
                     status = "needs-validation"
-            result.append({"table": table, "variant": name, "dataset": VARIANTS[name].dataset,
+            result.append({"campaign": campaign, "table": table, "variant": name, "dataset": VARIANTS[name].dataset,
                            "status": status})
     return result
 
 
+def gpu_memory_check(variant_name, micro_batch_size):
+    """Synthetic 512px forward/backward only; no images, optimizer step, or writes."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is unavailable; run memory-check manually on the GPU host")
+    if micro_batch_size < 1 or 16 % micro_batch_size:
+        raise ValueError("Micro batch must divide effective batch 16")
+    device = torch.device("cuda")
+    torch.cuda.reset_peak_memory_stats(device)
+    free_before, total = torch.cuda.mem_get_info(device)
+    model = CADViTCandidate(VARIANTS[variant_name].model_config()).to(device).train()
+    inputs = torch.zeros(micro_batch_size, 3, 512, 512, device=device)
+    labels = torch.zeros(micro_batch_size, dtype=torch.long, device=device)
+    with torch.autocast(device_type="cuda", enabled=True):
+        logits = model(inputs)
+        loss = nn.CrossEntropyLoss()(logits, labels)
+    if not bool(torch.isfinite(loss)):
+        raise FloatingPointError("Nonfinite synthetic loss")
+    loss.backward()
+    return {"variant": variant_name, "micro_batch_size": micro_batch_size,
+            "synthetic_only": True, "optimizer_steps": 0,
+            "input_shape": [micro_batch_size, 3, 512, 512],
+            "output_shape": list(logits.shape),
+            "free_gib_before": free_before / 2**30,
+            "total_gib": total / 2**30,
+            "peak_allocated_gib": torch.cuda.max_memory_allocated(device) / 2**30,
+            "note": "Passing one batch does not guarantee full-epoch stability"}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("matrix", "init", "preflight", "dry-run", "train", "test", "compare"))
+    parser.add_argument("command", choices=("matrix", "init", "preflight", "dry-run",
+                                             "memory-check", "train", "test", "compare"))
     parser.add_argument("--artifact-root", type=Path)
+    parser.add_argument("--campaign", choices=tuple(CAMPAIGNS), default="paper_v1")
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--variant", choices=tuple(VARIANTS))
     parser.add_argument("--micro-batch", type=int, default=16)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--max-epochs-per-invocation", type=int)
     parser.add_argument("--execute-training", action="store_true")
+    parser.add_argument("--execute-memory-check", action="store_true")
     parser.add_argument("--execute-final-test", action="store_true")
     parser.add_argument("--dataset", choices=("APTOS2019", "DDR"))
     parser.add_argument("--result", type=Path)
     args = parser.parse_args(argv)
-    if args.command != "matrix" and args.command != "dry-run" and args.artifact_root is None:
+    if args.command not in {"matrix", "dry-run", "memory-check"} and args.artifact_root is None:
         parser.error("--artifact-root is required")
-    if args.command in {"preflight", "dry-run", "train", "test"} and not args.variant:
+    if args.command in {"preflight", "dry-run", "memory-check", "train", "test"} and not args.variant:
         parser.error("--variant is required")
     if args.command == "matrix":
-        output = matrix(args.artifact_root)
+        output = matrix(args.artifact_root, args.campaign)
     elif args.command == "init":
-        output = {"protocol": str(create_protocol(args.artifact_root, args.micro_batch))}
+        output = {"protocol": str(create_protocol(args.artifact_root, args.micro_batch, args.campaign))}
     elif args.command == "dry-run":
         validate_variant_matrix()
         variant = VARIANTS[args.variant]
@@ -643,19 +800,24 @@ def main(argv=None):
                                             "finite": True},
                   "note": "No dataset, GPU training, or final test accessed"}
     elif args.command == "preflight":
-        output = preflight(args.artifact_root, args.variant, args.data_root)
+        output = preflight(args.artifact_root, args.variant, args.data_root, args.campaign)
+    elif args.command == "memory-check":
+        if not args.execute_memory_check:
+            parser.error("memory-check requires --execute-memory-check")
+        output = gpu_memory_check(args.variant, args.micro_batch)
     elif args.command == "train":
         if not args.execute_training:
             parser.error("train requires --execute-training")
-        output = {"run_dir": str(train(args.artifact_root, args.variant, args.data_root, args.resume))}
+        output = {"run_dir": str(train(args.artifact_root, args.variant, args.data_root,
+                                       args.resume, args.campaign, args.max_epochs_per_invocation))}
     elif args.command == "test":
         if not args.execute_final_test:
             parser.error("test requires --execute-final-test")
-        output = final_test(args.artifact_root, args.variant, args.data_root)
+        output = final_test(args.artifact_root, args.variant, args.data_root, args.campaign)
     else:
         if args.dataset is None or args.result is None:
             parser.error("compare requires --dataset and --result")
-        output = comparison_rows(args.dataset, args.result, args.artifact_root)
+        output = comparison_rows(args.dataset, args.result, args.artifact_root, args.campaign)
     print(json.dumps(output, indent=2))
 
 
