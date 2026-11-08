@@ -1,4 +1,4 @@
-# CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging
+# Reproduksi CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging
 
 Reproduksi penelitian [CAD-ViT (2025)](https://ieeexplore.ieee.org/document/11009024) dalam satu notebook utama, **CAD_ViT.ipynb**. Notebook menyatukan EDA, preprocessing, pengembangan model, training, dan evaluasi sebagai satu workflow penelitian tim. Output EDA historis pada §2.2 berasal dari eksekusi yang belum dapat ditautkan secara pasti ke dataset resmi dan manifest training V2; grafik APTOS2019 lokal pada §2.3 memakai pasangan label–gambar yang diverifikasi secara terpisah. Interpretasikan kedua kelompok output sesuai provenance masing-masing.
 
@@ -17,7 +17,7 @@ Pada server yang diaudit, anotasi DDR berada di <code>DDR/DDR-dataset/DR_grading
 
 Notebook membaca <code>CAD_VIT_DATA_ROOT</code> sebagai direktori yang memuat <code>APTOS2019/</code> dan <code>DDR/</code>. Variabel opsional <code>CAD_VIT_OUTPUT_ROOT</code> menunjuk lokasi keluaran EDA; jika kosong, notebook memakai <code>eda_results/</code> di direktori induk data root. Keduanya harus menunjuk ke lokasi yang dapat diakses dan, untuk keluaran, dapat ditulis oleh runtime.
 
-Contoh Colab, jalankan sebelum cell konfigurasi:
+Contoh Colab, jalankan sebelum sel konfigurasi:
 
 ~~~python
 import os
@@ -73,7 +73,7 @@ Notebook mencakup EDA dan preprocessing sebagai tahapan terpadu bersama model, t
 
 Dua hasil **final test V1** berikut disalin dari JSON eksperimen aktual; angka ini berbeda dari metrik validation V2 yang dipakai untuk memilih checkpoint:
 
-| Dataset | Run | Best epoch dari validation | n test | Test accuracy | Test F1 macro | Test specificity macro |
+| Dataset | Run | Epoch terbaik dari validation | Jumlah gambar test | Akurasi test | F1 makro test | Specificity makro test |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | APTOS2019 | <code>aptos_main_80ep_seed42</code> | 8 | 366 | 0,724044 | 0,554058 | 0,933978 |
 | DDR | <code>ddr_main_80ep_seed42</code> | 5 | 1.252 | 0,431310 | 0,353457 | 0,857445 |
@@ -84,17 +84,17 @@ Model tetap kandidat reproduksi parsial: 5.282.101 parameter versus 7.262.900 pa
 
 ## Status V1 dan V2
 
-**V1 — Original Reproduction Experiment** mempertahankan preprocessing crop → resize 512×512 (INTER_AREA) → Gaussian smoothing σ=1 (nilai σ asumsi), <code>WeightedRandomSampler</code> pada train, target 80 epoch, dan ringkasan hasil historis di §5.8 dan final test V1 di bagian 6 notebook. Kode, checkpoint, serta metrik V1 tidak ditimpa.
+**V1 — eksperimen reproduksi awal** mempertahankan preprocessing crop → resize 512×512 (INTER_AREA) → Gaussian smoothing σ=1 (nilai σ asumsi), <code>WeightedRandomSampler</code> pada train, target 80 epoch, dan ringkasan hasil historis di §5.8 dan final test V1 di bagian 6 notebook. Kode, checkpoint, serta metrik V1 tidak ditimpa.
 
-**V2 — Literature-Guided Refinement** mempertahankan arsitektur <code>CADViTCandidate</code> dan manifest/split V1. Setelah operasi preprocessing CAD-ViT (§III.A, Gbr. 1), V2 menambahkan Ben Graham pada RGB float32: <code>clip(4I − 4GaussianBlur(I, σ=10) + 128, 0, 255)</code>, sebelum augmentasi train dan skala tensor. Bentuk dan σ=10 didukung Pratama et al. (2026), §II.B.2, Pers. (2), Gbr. 2, dalam paper *Ben Graham Retinal Enhancement for Hierarchical Transformer-Based Diabetic Retinopathy Grading*; koefisien 4/−4 adalah *implementation assumption* peneliti, bukan nilai eksplisit CAD-ViT. V2 tidak memakai CLAHE atau <code>WeightedRandomSampler</code>. Grafik APTOS lokal baru pada §2 notebook menunjukkan halo berwarna pada tiga contoh V2; dampaknya pada klasifikasi belum terbukti.
+**V2 — penyempurnaan berdasarkan literatur** mempertahankan arsitektur <code>CADViTCandidate</code> dan manifest/split V1. Setelah operasi preprocessing CAD-ViT (§III.A, Gbr. 1), V2 menambahkan Ben Graham pada RGB float32: <code>clip(4I − 4GaussianBlur(I, σ=10) + 128, 0, 255)</code>, sebelum augmentasi train dan skala tensor. Bentuk dan σ=10 didukung Pratama et al. (2026), §II.B.2, Pers. (2), Gbr. 2, dalam paper *Ben Graham Retinal Enhancement for Hierarchical Transformer-Based Diabetic Retinopathy Grading*; koefisien 4/−4 adalah *implementation assumption* peneliti, bukan nilai eksplisit CAD-ViT. V2 tidak memakai CLAHE atau <code>WeightedRandomSampler</code>. Grafik APTOS lokal baru pada §2 notebook menunjukkan halo berwarna pada tiga contoh V2; dampaknya pada klasifikasi belum terbukti.
 
-### Completed V2 Experiments — 65/30 Epochs
+### Eksperimen V2 selesai — 65/30 epoch
 
 **Hasil training V2 dari log asli di luar repository:** APTOS2019 <code>aptos_v2_bg10_stable_65ep_seed42</code> lengkap epoch 1–65; best validation macro-F1 **0,650653821679372** pada epoch 65, validation accuracy 0,8142076502732241. DDR <code>ddr_v2_bg10_stable_30ep_seed42</code> lengkap epoch 1–30; best validation macro-F1 **0,5877264724487317** pada epoch 24, validation accuracy 0,8035143769968051; final epoch 30 macro-F1 0,5127013785813619. Log APTOS mencatat 10 skipped optimizer steps AMP, DDR 15; semua metrik tercatat finite. SHA-256 dan metrik historis pernah dicatat pada versi sebelumnya; ringkasannya kini di §5.8, sedangkan log asli dan riwayat Git tetap tersedia. **Ini metrik validation, bukan final test.** Peneliti melaporkan pemeriksaan checkpoint APTOS <code>best.pt</code>/<code>last.pt</code>: indeks epoch 64, 285 tensor model, nol non-finite; checkpoint tidak dibuka ulang secara lokal. File checkpoint/config DDR dilaporkan tersedia di GPU lab, tetapi isinya belum diperiksa. Final test untuk run historis V2 65/30 epoch ini tidak terdokumentasi di workspace lokal.
 
 Durasi run historis V2, **65 epoch APTOS2019 dan 30 epoch DDR**, adalah deviasi dari 80 epoch CAD-ViT (§IV.B). Keduanya tetap hasil aktual yang terpisah dari run 80 epoch berikutnya. LR 0,000186, batch fisik 16, input 512×512, r=16, dan split 8:1:1 adalah target konfigurasi paper dalam kode. AdamW weight decay 0, CrossEntropyLoss, AMP+GradScaler, seed 42, clipping gradien norm 1, tanpa scheduler/early stopping, serta checkpoint menurut validation macro-F1 adalah *implementation assumptions*. Tidak ada Optuna ulang. Perbandingan paper, V1 final test, dan V2 validation ada di §6.8 notebook.
 
-### V2 — Hasil Training Aktual 80/80 Epochs
+### V2 — hasil pelatihan aktual 80/80 epoch
 
 `V2_EPOCHS` menetapkan **80 epoch untuk APTOS2019 dan DDR** sesuai target paper (§IV.B). Log APTOS2019 mencatat 80 epoch; validation macro-F1 terbaik **0,657127419 pada epoch 69**, accuracy **0,814207650** dan specificity **0,951646177** pada epoch itu. Rangkaian log DDR mencatat 80 epoch; validation macro-F1 terbaik **0,690323426 pada epoch 72**, accuracy **0,829872204**. Angka ini merupakan **validation**, bukan final test. Sumber dan 160 baris metrik, dua tabel lengkap, serta grafik tersimpan di §5.5 notebook; file log asli berada di luar repository. Specificity DDR pada epoch terbaik tidak tersedia pada JSONL recovery.
 
@@ -120,10 +120,26 @@ Kode training, resume, evaluasi, dan guard `RUN_V2_FINAL_TEST = False` tetap ada
 
 Dependensi runtime tambahan yang perlu dipastikan tersedia: `torchvision` yang cocok dengan versi PyTorch, `Pillow`, `numpy`, dan `jupyter`; `torch`, `pandas`, `opencv-python`/`opencv-python-headless`, `scikit-learn`, `matplotlib`, `seaborn`, serta `wandb` juga dipakai notebook. Jangan menyimpan token W&B di notebook atau repository. Mode W&B default `offline`; mode `online` memerlukan autentikasi melalui environment atau mekanisme login manual yang aman.
 
-## Notebook reproduksi terkontrol (read-only)
+## Notebook reproduksi terkontrol (hanya-baca)
 
 `CAD_ViT.ipynb` tetap notebook historis utama dan tidak ditimpa. Delapan notebook bernomor pada `reproduction/notebooks/` menampilkan protokol dan artefak kampanye baru tanpa mengulang training/final test: `01_preprocessing`, `02_architecture`, `03_training_protocol`, `04_classification_evaluation`, `05_ablation_and_reduction`, `06_balancing_analysis`, `07_error_analysis`, dan `08_gradcam`. Audit lama `preprocessing_analysis.ipynb` tetap tersedia. Semua notebook bernomor mengimpor modul `reproduction.cadvit` yang sama dengan runner.
 
 Notebook 04 menyimpan tiga heatmap **PAPER_REFERENCE** Figure 4–5; notebook 06 menyimpan dua bar chart **PAPER_REFERENCE** Figure 6. Notebook 02 dan 08 menyimpan hasil **SYNTHETIC_TEST** CPU. Notebook 06 dapat membaca kurva dan distribusi kelas dari artefak kampanye yang fingerprint-nya cocok; notebook 04 dapat menampilkan confusion matrix hasil final yang sudah dibekukan. Gambar dataset nyata, hasil kampanye baru, dan galeri kesalahan tetap **PENDING** sampai artefak yang sesuai tersedia; membuka notebook atau Run All tidak menjalankan training atau final test. Path artefak dibaca melalui `CAD_VIT_ARTIFACT_ROOT`; audit gambar train/validation memerlukan `CAD_VIT_AUDIT_IMAGE`, `CAD_VIT_AUDIT_MANIFEST`, `CAD_VIT_DATA_ROOT` (root dataset tertentu), dan `CAD_VIT_AUDIT_SPLIT`. Notebook menolak gambar test untuk audit visual. Galeri kesalahan test memerlukan opt-in `CAD_VIT_SHOW_TEST_GALLERY=1` setelah evaluasi final dikunci; Grad-CAM pada gambar train/validation memerlukan `CAD_VIT_RUN_GRADCAM=1` dan checkpoint tepercaya. Semua hasil baru harus disimpan di direktori kampanye di luar repo, bukan di notebook historis.
 
-`paper_v1` yang telah diinisialisasi di KC adalah kontrol **imbalanced** dan tidak boleh ditimpa. Kampanye `balanced_v1` terpisah memakai oversampling train-only deterministik sebagai **implementation assumption**; paper menyebut balancing melalui augmentasi tetapi tidak memberi resep per kelas. Sebelum 80 epoch penuh, jalankan memory-check sintetis, preflight manifest/dependency, lalu pilot satu epoch secara **manual**. Perintah, matriks Figure 1–8/Table 1–5, definisi metrik, dan status `GO/NO-GO` ada di [rencana reproduksi](docs/PAPER_EXPERIMENT_REPRODUCTION_PLAN.md). Jumlah parameter kandidat tetap 5.282.101 versus 7,2629 juta pada Tabel 1 paper; hasil baru tetap independent reproduction, bukan kode resmi penulis.
+`paper_v1` yang telah diinisialisasi di KC adalah kontrol dengan kelas **tidak seimbang** dan tidak boleh ditimpa. Kampanye `balanced_v1` terpisah memakai oversampling deterministik hanya pada train sebagai **asumsi implementasi**; paper menyebut balancing melalui augmentasi tetapi tidak memberi resep per kelas. Pemeriksaan memori sintetis, preflight manifest/dependensi, dan pilot satu epoch adalah langkah manual untuk run baru yang terpisah, setelah status artefak server diperiksa. Langkah ini tidak boleh menginisialisasi ulang run yang sudah berjalan atau diarsipkan. Perintah, matriks Gambar 1–8/Tabel 1–5, definisi metrik, dan status GO/NO-GO ada di [rencana reproduksi](docs/PAPER_EXPERIMENT_REPRODUCTION_PLAN.md). Jumlah parameter kandidat tetap 5.282.101 versus 7,2629 juta pada Tabel 1 paper; hasil baru tetap reproduksi independen, bukan kode resmi penulis.
+
+## Laporan keadaan kampanye terkontrol — 8 November 2026
+
+Angka di bagian ini berasal dari **keluaran terminal server yang dilaporkan peneliti**, bukan dari artefak kampanye yang diperiksa ulang di workspace lokal. Notebook utama menempatkannya di §5.7.1 dan memisahkannya dari hasil V1 serta V2 historis 80/80 epoch di §5.5. Source runner FP32 baru, manifest, history, dan checkpoint campaign terbaru belum tersedia lokal; status setelah pengamatan terakhir harus diverifikasi lagi. Menampilkan history.jsonl saja belum memastikan kecocokan konfigurasi/protokol, SHA-256 manifest, hash sumber model dan preprocessing, serta metadata checkpoint.
+
+| Run | Status terakhir yang dilaporkan | Validation, bukan pengujian akhir |
+| --- | --- | --- |
+| APTOS2019 `balanced_v1` | AMP, full oversampling 7.225 draw/epoch; 69/80 epoch; 23 skipped AMP updates | Best epoch 24; accuracy 79,23%, macro-F1 66,14%, loss 0,674393 |
+| DDR `balanced_v1` | AMP, gagal selama epoch 18; run dilaporkan diarsipkan pada experiments/archived_runs/ddr_balanced_v1_amp_failed_epoch18 | Checkpoint terbaik epoch 16; macro-F1 sekitar 56,84% |
+| DDR `baseline_fp32_v2` | FP32 tanpa oversampling; pilot 3 epoch | Macro-F1 epoch 3 28,08% |
+| DDR `capped_fp32_v2` | FP32 dengan cap oversampling 3×; pilot 3 epoch | Macro-F1 log sekitar 35,95%; evaluasi ulang CPU: accuracy 64,94%, macro-F1 35,91% |
+| DDR `balanced_fp32_v2` | Runner `run_ddr_balanced_fp32.py` dilaporkan ada di worktree server; preflight dilaporkan lulus dan kemajuan pelatihan dilaporkan terpisah, tetapi epoch serta metrik belum diperiksa dari artefak lokal | **PENDING verifikasi**. Oversampling penuh hanya pada train: 25.070 sampel/epoch; target 80 epoch, belum diklaim selesai |
+
+Confusion matrix DDR capped pilot yang diberikan peneliti ditampilkan di §6.3.1 notebook sebagai **validation epoch 3, reported server evidence**. Angka dan heatmap tersebut tidak menggantikan dua confusion matrix **V1 historical final test** di §6.3. Kode EDA dan audit preprocessing baru hanya membaca manifest atau gambar train/validation bila path dan opt-in diberikan; tanpa artefak ia menampilkan `PENDING`. Tidak ada training, final test, Optuna, atau pemrosesan dataset penuh yang dijalankan oleh sel baru.
+
+Untuk sel analisis baru di notebook utama, set `CAD_VIT_ARTIFACT_ROOT` ke root artefak campaign **di luar repository**. Sel §2.4 membaca metadata manifest dan history tanpa membuka gambar test. Galeri train dibatasi dua gambar per grade dan maksimal 60 gambar untuk statistik resolusi; aktifkan secara sadar dengan `CAD_VIT_RENDER_TRAIN_EDA=1` serta `CAD_VIT_DATA_ROOT` yang benar. Audit visual §3.4 membutuhkan `CAD_VIT_RENDER_PREPROCESSING=1`, `CAD_VIT_AUDIT_IMAGE`, `CAD_VIT_AUDIT_MANIFEST`, `CAD_VIT_AUDIT_DATASET_ROOT`, dan `CAD_VIT_AUDIT_SPLIT=train` atau `val`. Gambar tersebut harus cocok dengan manifest dan SHA-256. Jika DDR berada pada root khusus, `CAD_VIT_DDR_ROOT` dapat menunjuk root yang sesuai dengan path relatif manifest. Jangan gunakan `Run All` untuk mengeksekusi ulang workflow historis; output lama sudah tersimpan, sedangkan sel baru dapat dijalankan secara terpisah dalam mode analisis CPU.
