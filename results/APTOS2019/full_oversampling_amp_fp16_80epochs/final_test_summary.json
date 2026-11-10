@@ -1,0 +1,99 @@
+{
+  "dataset": "APTOS2019",
+  "variant": "aptos_r16",
+  "split": "test",
+  "selected_epoch": 24,
+  "selection": "validation_macro_f1",
+  "manifest_sha256": "73d1546e3c2fd2bf9e3d0fd10af914cb523d28e4bc8e1f25212af454d4be8854",
+  "protocol_sha256": "4dbf28013fae912df08a4342740a756865aa5cf84773af847428d1d586ef265a",
+  "model_sha256": "6aff75039dbd2d3e545e6ff1998674221b3671df7d58362792e0b2ca249a0c25",
+  "metrics": {
+    "n": 366,
+    "accuracy": 0.73224043715847,
+    "precision_macro": 0.5325509295442328,
+    "recall_macro": 0.5357451099011897,
+    "f1_macro": 0.5315285435735081,
+    "specificity_macro": 0.9360795785213256,
+    "confusion_matrix": [
+      [
+        169,
+        8,
+        1,
+        2,
+        0
+      ],
+      [
+        2,
+        19,
+        13,
+        2,
+        2
+      ],
+      [
+        1,
+        13,
+        65,
+        14,
+        7
+      ],
+      [
+        0,
+        1,
+        6,
+        4,
+        8
+      ],
+      [
+        0,
+        0,
+        8,
+        10,
+        11
+      ]
+    ],
+    "per_class": {
+      "0": {
+        "support": 180,
+        "precision": 0.9825581395348837,
+        "recall": 0.9388888888888889,
+        "f1": 0.9602272727272727,
+        "specificity": 0.9838709677419355
+      },
+      "1": {
+        "support": 38,
+        "precision": 0.4634146341463415,
+        "recall": 0.5,
+        "f1": 0.48101265822784817,
+        "specificity": 0.9329268292682927
+      },
+      "2": {
+        "support": 100,
+        "precision": 0.6989247311827957,
+        "recall": 0.65,
+        "f1": 0.6735751295336787,
+        "specificity": 0.8947368421052632
+      },
+      "3": {
+        "support": 19,
+        "precision": 0.125,
+        "recall": 0.21052631578947367,
+        "f1": 0.1568627450980392,
+        "specificity": 0.9193083573487032
+      },
+      "4": {
+        "support": 29,
+        "precision": 0.39285714285714285,
+        "recall": 0.3793103448275862,
+        "f1": 0.3859649122807017,
+        "specificity": 0.9495548961424333
+      }
+    },
+    "aggregation": "five-class macro one-vs-rest; zero_division=0 for precision/recall/F1; undefined specificity omitted",
+    "precision_weighted": 0.7599195395491168,
+    "recall_weighted": 0.73224043715847,
+    "f1_weighted": 0.7449461138522905,
+    "specificity_weighted": 0.9481574554481578,
+    "f1_micro": 0.73224043715847,
+    "loss": 0.7320678110331134
+  }
+}
