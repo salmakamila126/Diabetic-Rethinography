@@ -10,5 +10,5 @@
   "last_epoch": 80,
   "last_validation_accuracy": 0.7841530054644809,
   "last_validation_macro_f1": 0.6219233861303464,
-  "final_test_completed": false
+  "final_test_completed": true
 }
