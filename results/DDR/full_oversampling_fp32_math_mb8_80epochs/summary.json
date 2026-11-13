@@ -1,0 +1,35 @@
+{
+  "dataset": "DDR",
+  "campaign": "cadvit_tables_1_5_balanced_fp32_math_mb8_diag",
+  "variant": "ddr_full",
+  "status": "training_completed",
+  "epochs_completed": 80,
+  "checkpoint_selection": "validation_macro_f1",
+  "best_epoch": 69,
+  "best_validation_macro_f1": 0.6530693590977841,
+  "best_validation_accuracy": 0.7859424920127795,
+  "best_validation_loss": 0.7904205726007351,
+  "last_epoch": 80,
+  "last_epoch_metrics": {
+    "epoch": 80,
+    "train_loss": 0.24512833673181922,
+    "skipped_optimizer_steps": 0,
+    "val_loss": 0.8338790182388736,
+    "val_accuracy": 0.7883386581469649,
+    "val_macro_f1": 0.6263427013066094,
+    "val_macro_specificity": 0.9410028978221524,
+    "epoch_seconds": 2716.3173432009935,
+    "train_class_counts_after": {
+      "0": 5014,
+      "1": 5014,
+      "2": 5014,
+      "3": 5014,
+      "4": 5014
+    }
+  },
+  "final_test_completed": true,
+  "final_test_status": "COMPLETED",
+  "final_test_summary_file": "final_test_summary.json",
+  "final_test_confusion_matrix_file": "confusion_matrix.png",
+  "protocol_note": "Recovery fork: epochs 1-42 inherited from original FP32 micro-batch 16 campaign; epochs 43-80 used FP32 Math SDPA, micro-batch 8 and gradient accumulation 2."
+}

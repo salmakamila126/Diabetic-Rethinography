@@ -1,0 +1,102 @@
+{
+  "dataset": "DDR",
+  "campaign": "cadvit_tables_1_5_balanced_fp32_math_mb8_diag",
+  "variant": "ddr_full",
+  "split": "test",
+  "status": "completed",
+  "best_checkpoint_epoch": 69,
+  "test_samples": 1252,
+  "correct_predictions": 975,
+  "accuracy": 0.7787539936102237,
+  "macro_f1": 0.6319812217431724,
+  "weighted_f1": 0.8011143014317892,
+  "macro_precision": 0.6214465962662282,
+  "macro_recall": 0.6840525897005094,
+  "macro_specificity": 0.9410946313470154,
+  "quadratic_weighted_kappa": 0.8370787904943411,
+  "grade_mae": 0.305111821086262,
+  "confusion_matrix": [
+    [
+      530,
+      74,
+      17,
+      0,
+      5
+    ],
+    [
+      12,
+      37,
+      14,
+      0,
+      0
+    ],
+    [
+      41,
+      52,
+      325,
+      16,
+      14
+    ],
+    [
+      0,
+      1,
+      11,
+      11,
+      0
+    ],
+    [
+      1,
+      2,
+      10,
+      7,
+      72
+    ]
+  ],
+  "per_class": [
+    {
+      "grade": 0,
+      "precision": 0.9075342465753424,
+      "recall": 0.8466453674121406,
+      "f1": 0.8760330578512396,
+      "specificity": 0.9137380191693291,
+      "support": 626
+    },
+    {
+      "grade": 1,
+      "precision": 0.22289156626506024,
+      "recall": 0.5873015873015873,
+      "f1": 0.3231441048034934,
+      "specificity": 0.8915054667788057,
+      "support": 63
+    },
+    {
+      "grade": 2,
+      "precision": 0.8620689655172413,
+      "recall": 0.7254464285714286,
+      "f1": 0.7878787878787878,
+      "specificity": 0.9353233830845771,
+      "support": 448
+    },
+    {
+      "grade": 3,
+      "precision": 0.3235294117647059,
+      "recall": 0.4782608695652174,
+      "f1": 0.3859649122807018,
+      "specificity": 0.9812855980471928,
+      "support": 23
+    },
+    {
+      "grade": 4,
+      "precision": 0.7912087912087912,
+      "recall": 0.782608695652174,
+      "f1": 0.7868852459016393,
+      "specificity": 0.9836206896551725,
+      "support": 92
+    }
+  ],
+  "manifest_sha256": "7bc3e3916e012bc46fcd9cd69aa469e0daf3229e1273f1d8ecb6054899bf6eb1",
+  "checkpoint_sha256": "84e3272d3f10d9179fd2dd9e2799b640962e1185981856f87bcb3876b9deace0",
+  "protocol_type": "mixed_protocol_recovery",
+  "source_test_metrics_sha256": "4575f79eb536999c3ee0a9cdfb4a52dd01cf613020a1174556563df2367e1ea3",
+  "source_predictions_remain_server_side": true
+}

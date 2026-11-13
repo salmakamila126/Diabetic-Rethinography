@@ -1,0 +1,15 @@
+{
+  "type": "diagnostic_recovery_fork",
+  "source": "/mnt/home/probation-03/Kel_13/experiments/cadvit_tables_1_5_balanced_fp32_v2/ddr_full",
+  "target": "/mnt/home/probation-03/Kel_13/experiments/cadvit_tables_1_5_balanced_fp32_math_mb8_diag/ddr_full",
+  "source_epoch_completed": 42,
+  "source_last_pt_sha256": "b7f5e9fcabc88774ecc61f31380ae582a2d3a6fcdd7fb63fc669491e7802b03e",
+  "source_best_pt_sha256": "e4ff648792cc55e8a7da49773149f39753df28d3c084b475fd23254cf15876b9",
+  "original_micro_batch": 16,
+  "fork_micro_batch": 8,
+  "fork_accumulation": 2,
+  "effective_batch_size": 16,
+  "precision": "FP32",
+  "attention_backend": "MATH",
+  "note": "Different training protocol; not identical continuation"
+}

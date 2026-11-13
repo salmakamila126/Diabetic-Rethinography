@@ -1,0 +1,7 @@
+{
+  "best_checkpoint_epoch": 69,
+  "best_checkpoint_sha256": "84e3272d3f10d9179fd2dd9e2799b640962e1185981856f87bcb3876b9deace0",
+  "last_checkpoint_epoch": 80,
+  "last_checkpoint_sha256": "9bfce7c6ecfbf1dd806da19a43d0b45a97db5502a8138a0d4138c6b309d9ee4b",
+  "checkpoint_files_committed": false
+}

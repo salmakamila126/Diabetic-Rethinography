@@ -1,0 +1,74 @@
+{
+  "variant": {
+    "name": "ddr_full",
+    "dataset": "DDR",
+    "task": "five_class",
+    "reduction": 16,
+    "use_mfb": true,
+    "use_attention": true
+  },
+  "model_config": {
+    "stem_channels": 32,
+    "stage_channels": [
+      32,
+      64,
+      64,
+      96,
+      96,
+      128,
+      128,
+      160,
+      160
+    ],
+    "expansion": 2,
+    "reduction": 16,
+    "patch_size": 2,
+    "transformer_depth": 2,
+    "transformer_heads": 4,
+    "mlp_ratio": 2,
+    "head_channels": 320,
+    "num_classes": 5,
+    "use_mfb": true,
+    "use_attention": true
+  },
+  "protocol": {
+    "seed": 42,
+    "epochs": 80,
+    "learning_rate": 0.000186,
+    "effective_batch_size": 16,
+    "micro_batch_size": 8,
+    "accumulation": 2,
+    "preprocessing": "paper_described_historical_v1",
+    "augment_train": true,
+    "balancing": "train_oversample_uniform",
+    "optimizer": "AdamW",
+    "weight_decay": 0.0,
+    "loss": "CrossEntropyLoss",
+    "amp": false,
+    "grad_clip_norm": 1.0,
+    "checkpoint_metric": "validation_macro_f1",
+    "checkpoint_tiebreak": "validation_loss",
+    "num_workers": 0
+  },
+  "protocol_sha256": "92c801d6308d58e7a474c2b4d682afc73edde7ed1d33c3d37bf53d29ec8e5305",
+  "manifest_sha256": "7bc3e3916e012bc46fcd9cd69aa469e0daf3229e1273f1d8ecb6054899bf6eb1",
+  "model_sha256": "6aff75039dbd2d3e545e6ff1998674221b3671df7d58362792e0b2ca249a0c25",
+  "preprocessing_sha256": "34d4e39bda7a3a996cc1662bfc7144c09667071a52435050491af531e1fbb7b5",
+  "paper": "10.1109/ACCESS.2025.3572455; candidate architecture; assumptions documented",
+  "campaign": "balanced_v1",
+  "runner_sha256": "9930ca80a8bf78ac6030bfa7d8b138fdf6fc9817f49cb8a8fd9b2d4a82e2baae",
+  "train_class_counts_before": {
+    "0": 5014,
+    "1": 504,
+    "2": 3581,
+    "3": 189,
+    "4": 730
+  },
+  "train_class_counts_after": {
+    "0": 5014,
+    "1": 5014,
+    "2": 5014,
+    "3": 5014,
+    "4": 5014
+  }
+}
