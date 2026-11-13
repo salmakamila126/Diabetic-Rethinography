@@ -1,4 +1,4 @@
-"""Regression tests for the notebook extraction of CADViTCandidate.
+"""Regression tests for the archived notebook extraction of CADViTCandidate.
 
 Only the two historical architecture cells are executed; no dataset, training,
 checkpoint, or evaluation cell is loaded.
@@ -31,7 +31,7 @@ COMPONENTS = (
 
 
 def architecture_sources():
-    notebook = json.loads((ROOT / "CAD_ViT.ipynb").read_text(encoding="utf-8"))
+    notebook = json.loads((ROOT / "reproduction/archive/CAD_ViT_original_105_cells.ipynb").read_text(encoding="utf-8"))
     code = ["".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code"]
     first = [source for source in code if "class ConvBNAct(nn.Sequential):" in source]
     second = [source for source in code if "class CADViTCandidate(nn.Module):" in source]
@@ -59,8 +59,8 @@ class ModelExtractionTests(unittest.TestCase):
         first, second = architecture_sources()
         cls.historical_source = first + "\n" + second
         cls.historical = {"__name__": "historical_cadvit_architecture"}
-        exec(compile(first, "CAD_ViT.ipynb:architecture_1", "exec"), cls.historical)
-        exec(compile(second, "CAD_ViT.ipynb:architecture_2", "exec"), cls.historical)
+        exec(compile(first, "CAD_ViT_original_105_cells.ipynb:architecture_1", "exec"), cls.historical)
+        exec(compile(second, "CAD_ViT_original_105_cells.ipynb:architecture_2", "exec"), cls.historical)
 
     def test_architecture_definitions_match_notebook(self):
         historical = named_nodes(self.historical_source)

@@ -1,0 +1,93 @@
+{
+  "dataset": "APTOS2019",
+  "run": "aptos_v2_bg10_stable_80ep_seed42",
+  "split": "test",
+  "selected_epoch": 69,
+  "selection_metric": "validation macro-F1",
+  "manifest_sha256": "73d1546e3c2fd2bf9e3d0fd10af914cb523d28e4bc8e1f25212af454d4be8854",
+  "preprocessing": "V2 BG10",
+  "metrics": {
+    "n": 366,
+    "accuracy": 0.7896174863387978,
+    "precision_macro": 0.615920497854645,
+    "recall_macro": 0.606173018753781,
+    "f1_macro": 0.6049524682606406,
+    "specificity_macro": 0.943038529998469,
+    "confusion_matrix": [
+      [
+        177,
+        2,
+        0,
+        0,
+        1
+      ],
+      [
+        8,
+        22,
+        7,
+        0,
+        1
+      ],
+      [
+        7,
+        16,
+        69,
+        4,
+        4
+      ],
+      [
+        1,
+        2,
+        5,
+        3,
+        8
+      ],
+      [
+        1,
+        1,
+        6,
+        3,
+        18
+      ]
+    ],
+    "per_class": {
+      "0": {
+        "support": 180,
+        "precision": 0.9123711340206185,
+        "recall": 0.9833333333333333,
+        "f1": 0.946524064171123,
+        "specificity": 0.9086021505376344
+      },
+      "1": {
+        "support": 38,
+        "precision": 0.5116279069767442,
+        "recall": 0.5789473684210527,
+        "f1": 0.5432098765432098,
+        "specificity": 0.9359756097560976
+      },
+      "2": {
+        "support": 100,
+        "precision": 0.7931034482758621,
+        "recall": 0.69,
+        "f1": 0.7379679144385026,
+        "specificity": 0.9323308270676691
+      },
+      "3": {
+        "support": 19,
+        "precision": 0.3,
+        "recall": 0.15789473684210525,
+        "f1": 0.20689655172413793,
+        "specificity": 0.9798270893371758
+      },
+      "4": {
+        "support": 29,
+        "precision": 0.5625,
+        "recall": 0.6206896551724138,
+        "f1": 0.5901639344262296,
+        "specificity": 0.9584569732937686
+      }
+    },
+    "aggregation": "five-class macro one-vs-rest; zero_division=0 for precision/recall/F1; undefined specificity omitted"
+  },
+  "provenance": "New final test; distinct from historical V1 and V2 validation"
+}
