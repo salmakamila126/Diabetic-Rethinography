@@ -1,6 +1,6 @@
 # Persiapan final test V2 80 epoch
 
-**Status: preflight disiapkan; final test belum dijalankan.** Modul `reproduction/cadvit/evaluation.py` adalah jalur baru yang terpisah dari guard historis `CAD_ViT.ipynb`. Tidak ada hasil final test V2 atau confusion matrix V2 yang diklaim di sini.
+**Status dokumen:** ini adalah rencana preflight sebelum final test V2 80 epoch. Dua JSON final test kini tersedia lokal dan SHA-256-nya cocok dengan catatan server pada 2026-11-13; lihat [audit provenance V2](V2_FINAL_TEST_PROVENANCE.md) dan [laporan utama](../CAD_ViT.ipynb). Jangan jalankan ulang final test. Modul `reproduction/cadvit/evaluation.py` tetap jalur terpisah dari guard V2 65/30 epoch di [notebook historis](../reproduction/archive/CAD_ViT_original_105_cells.ipynb).
 
 ## Target dan provenance
 
@@ -52,4 +52,4 @@ python -m reproduction.cadvit.evaluation preflight --dataset DDR --artifact-root
 1. Keberadaan dan isi checkpoint, manifest, log, serta kompatibilitas runtime server belum diverifikasi dari laptop ini. Preflight server harus berhasil pada kedua dataset.
 2. Kesinambungan state DDR lintas pemindahan checkpoint epoch 63 tidak dapat dibuktikan dari metadata epoch/log saja tanpa bukti transfer atau hash yang memang tersedia.
 3. Kesamaan dataset image bytes setelah manifest dibuat belum dibuktikan oleh preflight yang tidak membuka gambar.
-4. Final test dan confusion matrix V2 tetap **PENDING**; skor paper tidak boleh langsung dibandingkan sebagai macro-F1 yang identik.
+4. Hasil agregat final test V2 dan confusion matrix kini tersedia dengan hash JSON terverifikasi; **lineage checkpoint, manifest, dan jejak eksekusi** tetap belum terbukti secara mandiri. Skor paper tidak boleh langsung dibandingkan sebagai macro-F1 yang identik.

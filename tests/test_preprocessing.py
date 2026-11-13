@@ -1,4 +1,4 @@
-"""Pixel regression tests for preprocessing extracted from CAD_ViT.ipynb."""
+"""Pixel regression tests for preprocessing extracted from the archived notebook."""
 
 import ast
 import io
@@ -29,7 +29,7 @@ NAMES = ("PREPROCESS_CONFIG", "preprocess_fundus", "BG_V2_CONFIG", "preprocess_f
 
 
 def historical_nodes():
-    notebook = json.loads((ROOT / "CAD_ViT.ipynb").read_text(encoding="utf-8"))
+    notebook = json.loads((ROOT / "reproduction/archive/CAD_ViT_original_105_cells.ipynb").read_text(encoding="utf-8"))
     matching = [
         "".join(cell["source"])
         for cell in notebook["cells"]
@@ -75,7 +75,7 @@ class PreprocessingPixelTests(unittest.TestCase):
         selected = [historical_nodes()[name] for name in NAMES]
         module = ast.fix_missing_locations(ast.Module(body=selected, type_ignores=[]))
         cls.historical = {"np": np, "cv2": cv2, "ImageOps": ImageOps}
-        exec(compile(module, "CAD_ViT.ipynb:preprocessing", "exec"), cls.historical)
+        exec(compile(module, "CAD_ViT_original_105_cells.ipynb:preprocessing", "exec"), cls.historical)
 
     def assert_pixel_equal(self, make_image):
         for name in ("preprocess_fundus", "preprocess_fundus_v2"):

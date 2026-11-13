@@ -1,0 +1,93 @@
+{
+  "dataset": "DDR",
+  "run": "ddr_v2_fp32_weighted_fp64clip_seed42",
+  "split": "test",
+  "selected_epoch": 72,
+  "selection_metric": "validation macro-F1",
+  "manifest_sha256": "7bc3e3916e012bc46fcd9cd69aa469e0daf3229e1273f1d8ecb6054899bf6eb1",
+  "preprocessing": "V2 BG10",
+  "metrics": {
+    "n": 1252,
+    "accuracy": 0.8043130990415336,
+    "precision_macro": 0.6098427557446378,
+    "recall_macro": 0.6389636691714238,
+    "f1_macro": 0.6202869401176525,
+    "specificity_macro": 0.9418616477896906,
+    "confusion_matrix": [
+      [
+        581,
+        17,
+        25,
+        0,
+        3
+      ],
+      [
+        24,
+        20,
+        19,
+        0,
+        0
+      ],
+      [
+        51,
+        38,
+        323,
+        21,
+        15
+      ],
+      [
+        0,
+        1,
+        10,
+        10,
+        2
+      ],
+      [
+        1,
+        1,
+        14,
+        3,
+        73
+      ]
+    ],
+    "per_class": {
+      "0": {
+        "support": 626,
+        "precision": 0.8843226788432268,
+        "recall": 0.9281150159744409,
+        "f1": 0.9056897895557288,
+        "specificity": 0.8785942492012779
+      },
+      "1": {
+        "support": 63,
+        "precision": 0.2597402597402597,
+        "recall": 0.31746031746031744,
+        "f1": 0.2857142857142857,
+        "specificity": 0.9520605550883096
+      },
+      "2": {
+        "support": 448,
+        "precision": 0.8260869565217391,
+        "recall": 0.7209821428571429,
+        "f1": 0.7699642431466032,
+        "specificity": 0.9154228855721394
+      },
+      "3": {
+        "support": 23,
+        "precision": 0.29411764705882354,
+        "recall": 0.43478260869565216,
+        "f1": 0.3508771929824562,
+        "specificity": 0.9804719283970708
+      },
+      "4": {
+        "support": 92,
+        "precision": 0.7849462365591398,
+        "recall": 0.7934782608695652,
+        "f1": 0.7891891891891891,
+        "specificity": 0.9827586206896551
+      }
+    },
+    "aggregation": "five-class macro one-vs-rest; zero_division=0 for precision/recall/F1; undefined specificity omitted"
+  },
+  "provenance": "New final test; distinct from historical V1 and V2 validation"
+}
