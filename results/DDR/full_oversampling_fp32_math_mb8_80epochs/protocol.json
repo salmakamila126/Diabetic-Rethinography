@@ -1,0 +1,27 @@
+{
+  "protocol": {
+    "seed": 42,
+    "epochs": 80,
+    "learning_rate": 0.000186,
+    "effective_batch_size": 16,
+    "micro_batch_size": 8,
+    "accumulation": 2,
+    "preprocessing": "paper_described_historical_v1",
+    "augment_train": true,
+    "balancing": "train_oversample_uniform",
+    "optimizer": "AdamW",
+    "weight_decay": 0.0,
+    "loss": "CrossEntropyLoss",
+    "amp": false,
+    "grad_clip_norm": 1.0,
+    "checkpoint_metric": "validation_macro_f1",
+    "checkpoint_tiebreak": "validation_loss",
+    "num_workers": 0
+  },
+  "campaign": "balanced_v1",
+  "classification": "CAD-ViT full oversampling FP32 experiment",
+  "balancing_assumption": "Train-only full oversampling to majority class; matches APTOS sampling strategy",
+  "precision": "FP32",
+  "fork_origin": "/mnt/home/probation-03/Kel_13/experiments/cadvit_tables_1_5_balanced_fp32_v2/ddr_full",
+  "fork_reason": "Epoch 43 diagnostic: Math SDPA, micro-batch 8, gradient accumulation 2; original run preserved"
+}
