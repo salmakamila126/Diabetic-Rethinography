@@ -1,0 +1,14 @@
+{
+  "dataset": "APTOS2019",
+  "campaign": "balanced_v1",
+  "completed_epochs": 80,
+  "selection_metric": "validation_macro_f1",
+  "best_epoch": 24,
+  "best_validation_accuracy": 0.7923497267759563,
+  "best_validation_macro_f1": 0.6614213564213565,
+  "best_validation_loss": 0.6743926057398645,
+  "last_epoch": 80,
+  "last_validation_accuracy": 0.7841530054644809,
+  "last_validation_macro_f1": 0.6219233861303464,
+  "final_test_completed": true
+}
