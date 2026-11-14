@@ -10,6 +10,9 @@ __pycache__/
 *.pt
 *.pth
 *.ckpt
+# APTOS image panels and metadata are local-only until sharing rights are confirmed.
+reproduction/report_figures/APTOS2019_*.png
+reproduction/report_figures/APTOS2019_*.json
 
 # Local credentials and environment files.
 .env

@@ -43,7 +43,12 @@ class NotebookTests(unittest.TestCase):
                                          and isinstance(node.func, ast.Name)
                                          and node.func.id in dangerous
                                          for node in ast.walk(tree)))
-                    self.assertIsNotNone(cell["execution_count"])
+                    if cell["execution_count"] is None:
+                        # The guarded real-image Grad-CAM cell is intentionally
+                        # unexecuted and has no saved image-level output.
+                        self.assertEqual(name, "08_gradcam.ipynb")
+                        self.assertIn("CAD_VIT_RUN_GRADCAM", source)
+                        self.assertEqual(cell["outputs"], [])
                     for output in cell["outputs"]:
                         if "image/png" in output.get("data", {}):
                             raw = base64.b64decode(output["data"]["image/png"], validate=True)
