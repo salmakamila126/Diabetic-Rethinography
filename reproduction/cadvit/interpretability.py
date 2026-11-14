@@ -95,13 +95,19 @@ def load_controlled_best(artifact_root, campaign, variant_name, *, trust_checkpo
                    "model_source_sha256": config["model_sha256"]}
 
 
-def plot_gradcam(original_rgb, result, true_grade, provenance):
-    """Display original RGB, normalized heatmap, and overlay without training."""
+def plot_gradcam(model_input_rgb, result, true_grade, provenance):
+    """Display model-input RGB, aligned Grad-CAM heatmap, and overlay without training.
+
+    Pass the exact preprocessed RGB pixels converted to the model tensor, NOT
+    the uncropped source photograph: cropping/resizing changes coordinates.
+    """
     import matplotlib.pyplot as plt
 
-    original = np.asarray(original_rgb)
+    original = np.asarray(model_input_rgb)
     if original.ndim != 3 or original.shape[2] != 3 or original.dtype != np.uint8:
-        raise ValueError("Original display image must be RGB uint8")
+        raise ValueError("Model input image must be RGB uint8")
+    if tuple(result["heatmap"].shape) != tuple(original.shape[:2]):
+        raise ValueError("Grad-CAM heatmap and model-input geometry differ")
     heat = result["heatmap"].detach().float()[None, None]
     heat = F.interpolate(heat, size=original.shape[:2], mode="bilinear",
                          align_corners=False)[0, 0].numpy()
@@ -110,7 +116,7 @@ def plot_gradcam(original_rgb, result, true_grade, provenance):
     overlay = np.clip(0.55 * original.astype(float) / 255 + 0.45 * colored, 0, 1)
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=150)
     for ax, image, title in zip(axes, (original, heat, overlay),
-                                ("Original RGB", "Grad-CAM heatmap", "Overlay")):
+                                ("Model input (RGB)", "Grad-CAM heatmap", "Aligned overlay")):
         ax.imshow(image, cmap="turbo" if title == "Grad-CAM heatmap" else None,
                   vmin=0 if title == "Grad-CAM heatmap" else None,
                   vmax=1 if title == "Grad-CAM heatmap" else None)
