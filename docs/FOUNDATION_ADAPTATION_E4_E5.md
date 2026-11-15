@@ -1,6 +1,6 @@
 # E4/E5 — controlled foundation adaptation and preprocessing sensitivity
 
-**Status:** implementation and synthetic tests only. No foundation-model weight, KC dataset, or GPU was accessed locally. The operator reports E3 completed on KC with 43 APTOS2019 and 40 DDR validation images across the prespecified 11 conditions; those pilot observations are exploratory. They do not justify E3 expansion, PReOF fusion, or a methodological novelty claim.
+**Status:** implementation and synthetic tests only. No foundation-model weight, KC dataset, or GPU was accessed locally. The [training readiness audit and approved B0/B1/B2 protocol](FOUNDATION_TRAINING_READINESS.md) records the operator-reported ConvNeXt 20-epoch outcomes, proposed scientific controls, and new observability outputs. The operator reports E3 completed on KC with 43 APTOS2019 and 40 DDR validation images across the prespecified 11 conditions; those pilot observations are exploratory. They do not justify E3 expansion, PReOF fusion, or a methodological novelty claim.
 
 ## Model and dependency audit
 
@@ -55,7 +55,7 @@ python3 -m venv "$ROOT/.venv_foundation"
 PY="$ROOT/.venv_foundation/bin/python"
 "$PY" -m pip install --upgrade pip
 "$PY" -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu126
-"$PY" -m pip install transformers==4.57.3 numpy==1.26.4 Pillow==11.1.0 huggingface_hub==0.36.0 safetensors==0.5.3
+"$PY" -m pip install transformers==4.57.3 numpy==1.26.4 Pillow==11.1.0 huggingface_hub==0.36.0 safetensors==0.5.3 tqdm==4.70.1
 "$PY" -m pip freeze > "$ROOT/foundation_dependency_freeze.txt"
 "$PY" -c 'import torch,transformers; print(torch.__version__, torch.cuda.is_available(), transformers.__version__)'
 ```
@@ -145,3 +145,59 @@ CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation sensitivity --data
 ```
 
 The optional DINOv3 ConvNeXt comparator requires separate authorized revision/processor verification and has **frozen-probe support only**. Do not launch its partial mode until the final-block layout and fair budget are reviewed. No real model performance, VRAM value, or E5 sensitivity result is claimed in this document.
+
+## E4 80-epoch budget and verified official-input cache
+
+The earlier **20-epoch commands remain valid for runs already in progress**. If such a run is interrupted before epoch 20, resume it with the original runner bytes in a separate checkout at commit `de4699e7162b461195f87924d5f7ca39d2313cdb`, the same environment and original guarded resume command; this revised file must not be substituted. Do not change its `--epochs`, runner file, or output directory mid-run: `run.json`, the smoke report, and each checkpoint bind the original budget and source SHA-256. A new 80-epoch campaign starts in a new output directory with `--epochs 80`. A completed 20-epoch **full** run made with the audited pre-extension source can instead continue at epoch 21 via the guarded extension below. The old 20-epoch directory is read-only. In either path, validation metrics and the macro-F1 checkpoint rule run at **every** epoch; `history.json` retains all epochs and `milestones.json` records the actual validation, train and resource values at epochs 20, 40, 60 and 80. No milestone value is inferred.
+
+Without the new input cache, full and partial modes decode the raw image and call the official processor **again each epoch**, including validation. The optional `prepare-input-cache` command stores only official `float32 [3,224,224]` input tensors. It is specific to the dataset, frozen manifest, model revision/weight/config, effective official processor, pinned library versions, runner source and chosen micro-batch. Each source image is SHA-256-checked by the manifest preflight. Cold construction checks **exact equality** between batch processing, singleton processing and the saved/reloaded tensor; every later read verifies metadata, file SHA-256, shape, dtype, finite values and tensor SHA-256. A corrupt or incomplete entry fails closed. Cache files and JSON sidecars are written through temporary files and atomic replacement. The two files are not a transaction: a crash between replacements leaves an invalid entry that requires investigation and a new cache directory. No frozen backbone embedding is used for full tuning.
+
+The raw float32 tensor payload is **602,112 bytes/image**: about **1.85 GiB for 3,296 APTOS train+validation images** and **6.32 GiB for 11,270 DDR train+validation images**, or **8.17 GiB per model** across both datasets. Both primary models require about **16.34 GiB** before `.npy` headers, JSON sidecars, filesystem overhead and checkpoints. The preparation report records actual disk bytes plus cold build/verification images per second. Re-running it with `--resume` measures warm SHA-checked reads; the first cold measurement is retained. The explicit `--verify-equivalence` option reprocesses every image and compares exact tensors again. These throughput values remain unknown until KC runs.
+
+The static [Transformers 4.57.3 DINOv3 ViT implementation](https://github.com/huggingface/transformers/blob/v4.57.3/src/transformers/models/dinov3_vit/modeling_dinov3_vit.py) accepts pixel tensors, applies trainable embeddings and twelve blocks, and returns a CLS pooled vector. Its mask token is used only for masked pretraining, so it can legitimately receive no gradient during classification. Full mode enables gradients for all backbone parameters and uses training behavior during training, eval behavior for validation. The gated [official ViT-S model card](https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m) does not expose exact processor/weight bytes anonymously. The full-mode smoke rejects unexpected missing backbone/head gradients while allowing the unused DINOv3 pretraining mask token. Real DINOv3 BF16 forward/backward, gradient coverage, resource fit and checkpoint loading must pass the manual KC smoke; static source inspection alone cannot establish those outcomes.
+
+### Manual KC cache, 80-epoch training, and monitoring
+
+Use the pinned snapshot and variables from the setup section above. Run the commands separately for both datasets and both primary models. Keep the existing 20-epoch process and its source environment untouched. Choose `MICRO` from a passing batch benchmark; this example uses 4 and effective batch 32. Prepare each cache **once** before independent training processes read it. Do not prepare concurrently into the same cache directory.
+
+```bash
+MICRO=4
+ACCUM=$((32 / MICRO))
+CACHE="$ROOT/foundation_inputs/$DATASET/$MODEL_KIND/b$MICRO"
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --batch-size "$MICRO" --device cuda:0 --precision bf16 --seed 42 --output-dir "$BASE/full_smoke_b${MICRO}_80"
+"$PY" -m novelty.foundation_adaptation prepare-input-cache --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" --batch-size "$MICRO" --input-cache-dir "$CACHE"
+"$PY" -m novelty.foundation_adaptation prepare-input-cache --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" --batch-size "$MICRO" --input-cache-dir "$CACHE" --resume --verify-equivalence
+"$PY" -m novelty.foundation_adaptation prepare-input-cache --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" --batch-size "$MICRO" --input-cache-dir "$CACHE" --resume
+```
+
+For a **new** 80-epoch run, use a unique output directory. Omit `--input-cache-dir` to use the original uncached processor path when investigating an equivalence issue. The cache is never an embedding cache.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --device cuda:0 --precision bf16 --seed 42 --smoke-report "$BASE/full_smoke_b${MICRO}_80/smoke.json" --input-cache-dir "$CACHE" --output-dir "$BASE/full_seed42_b${MICRO}_80_new" --epochs 80 --micro-batch "$MICRO" --accumulation "$ACCUM" --head-lr 0.001 --backbone-lr 0.00001
+```
+
+For a completed **20-to-80 continuation**, first archive the exact runner source from the audited pre-extension commit **outside the repository**. Its expected SHA-256 is `289d50684fe9d8ca06c9237d5318ebc449346a6e51f75a659f3ecfcfc0e112b1`. If the source run records a different implementation hash, or lacks a completed epoch-20 summary, matching smoke, best/last hash sidecars, optimizer or RNG, this extension path **rejects it**; review that run separately. The old smoke report path must be the report actually bound to the 20-epoch `run.json`. Any original checkpoint or manifest not locally available cannot be certified by this document.
+
+```bash
+LEGACY_SOURCE="$ROOT/foundation_runner_de4699e.py"
+git show de4699e7162b461195f87924d5f7ca39d2313cdb:novelty/foundation_adaptation.py > "$LEGACY_SOURCE"
+test "$(sha256sum "$LEGACY_SOURCE" | awk '{print $1}')" = 289d50684fe9d8ca06c9237d5318ebc449346a6e51f75a659f3ecfcfc0e112b1 || { echo 'Old source hash mismatch'; exit 1; }
+OLD_RUN="$BASE/full_seed42_b$MICRO"
+OLD_SMOKE="$BASE/full_smoke_b$MICRO/smoke.json"
+EXTENDED="$BASE/full_seed42_b${MICRO}_80_extension"
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --device cuda:0 --precision bf16 --seed 42 --smoke-report "$BASE/full_smoke_b${MICRO}_80/smoke.json" --input-cache-dir "$CACHE" --output-dir "$EXTENDED" --epochs 80 --micro-batch "$MICRO" --accumulation "$ACCUM" --head-lr 0.001 --backbone-lr 0.00001 --extend-from-run "$OLD_RUN" --legacy-source-file "$LEGACY_SOURCE" --legacy-smoke-report "$OLD_SMOKE" --trust-run-checkpoint
+```
+
+The first extension command verifies epoch 20 and creates a **new** run with copied optimizer, scaler, model, best-checkpoint and RNG state, then trains epochs 21–80. It does not write to `OLD_RUN`. Resume **the same new output** with identical flags plus `--resume`:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --device cuda:0 --precision bf16 --seed 42 --smoke-report "$BASE/full_smoke_b${MICRO}_80/smoke.json" --input-cache-dir "$CACHE" --output-dir "$EXTENDED" --epochs 80 --micro-batch "$MICRO" --accumulation "$ACCUM" --head-lr 0.001 --backbone-lr 0.00001 --extend-from-run "$OLD_RUN" --legacy-source-file "$LEGACY_SOURCE" --legacy-smoke-report "$OLD_SMOKE" --trust-run-checkpoint --resume
+```
+
+In separate terminals, independent APTOS and DDR runs can use GPU 0 and GPU 1 with **different** `DATASET`, `BASE`, `CACHE`, smoke and output paths. If `CUDA_VISIBLE_DEVICES=1`, the selected card is addressed as `--device cuda:0` inside that process. Monitor both shared cards while training:
+
+```bash
+nvidia-smi --query-gpu=index,name,memory.used,memory.free,utilization.gpu --format=csv -l 2
+```
+
+The continuation is an auditable **protocol extension**, not an uninterrupted single-source 80-epoch run: runner bytes and optional input transport change after epoch 20. Exact cached-versus-current-uncached equality supports the input transport, but cannot recover unrecorded historical library behavior. Compare 20/40/60/80 within this provenance boundary and label it explicitly. No test split is opened and no 80-epoch outcome is claimed here.

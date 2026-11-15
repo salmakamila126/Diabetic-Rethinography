@@ -23,6 +23,7 @@ from novelty import preof_phase1 as phase
 
 
 SCHEMA = "foundation-adaptation-v1"
+LEGACY_20_SOURCE_SHA256 = "289d50684fe9d8ca06c9237d5318ebc449346a6e51f75a659f3ecfcfc0e112b1"
 CACHE_SCHEMA = "foundation-frozen-vectors-v1"
 MODELS = {
     "dinov3_vits16": {"hub_id": "facebook/dinov3-vits16-pretrain-lvd1689m",
@@ -176,25 +177,29 @@ def audit_snapshot(model_kind, model_dir, revision, weight_sha256):
             "config": config, "processor_config": processor}
 
 
-def load_local_backbone(snapshot, *, trust_legacy_bin=False):
-    """Load only local official files; require explicit trust for legacy pickle."""
-    if snapshot["weight_file"] == "pytorch_model.bin" and not trust_legacy_bin:
-        raise ValueError("Legacy .bin loading requires --trust-legacy-bin after hash verification")
+def load_local_processor(snapshot):
+    """Read the pinned official processor without loading model weights."""
     import transformers
-    from transformers import AutoImageProcessor, AutoModel
+    from transformers import AutoImageProcessor
 
     if transformers.__version__ != "4.57.3":
-        raise ValueError("E4/E5 requires audited transformers==4.57.3 model layout")
+        raise ValueError("E4/E5 requires audited transformers==4.57.3")
+    return AutoImageProcessor.from_pretrained(
+        snapshot["model_dir"], local_files_only=True, trust_remote_code=False, use_fast=False)
 
-    directory = snapshot["model_dir"]
-    processor = AutoImageProcessor.from_pretrained(directory, local_files_only=True,
-                                                   trust_remote_code=False, use_fast=False)
+
+def load_local_backbone(snapshot, *, trust_legacy_bin=False):
+    """Load only hash-checked local official weights, never Hub or remote code."""
+    if snapshot["weight_file"] == "pytorch_model.bin" and not trust_legacy_bin:
+        raise ValueError("Legacy .bin loading requires --trust-legacy-bin after hash verification")
+    from transformers import AutoModel
+
+    processor = load_local_processor(snapshot)
     model_options = ({"attn_implementation": "eager"}
                      if snapshot["model_kind"] == "dinov3_vits16" else {})
-    backbone = AutoModel.from_pretrained(directory, local_files_only=True,
-                                         trust_remote_code=False,
-                                         use_safetensors=snapshot["weight_file"] == "model.safetensors",
-                                         **model_options)
+    backbone = AutoModel.from_pretrained(
+        snapshot["model_dir"], local_files_only=True, trust_remote_code=False,
+        use_safetensors=snapshot["weight_file"] == "model.safetensors", **model_options)
     if backbone.config.model_type != snapshot["model_type"]:
         raise ValueError("Loaded model type changed")
     return backbone, processor
@@ -257,15 +262,22 @@ def configure_trainable(backbone, model_kind, mode):
     return names
 
 
-def _image_batch(rows, processor):
+def _image_batch(rows, processor, *, augment_seed=None, augment_epoch=None):
     from PIL import Image, ImageOps
     import torch
 
     images = []
     for row in rows:
+        if augment_epoch is not None and row.get("split") != "train":
+            raise ValueError("Stochastic augmentation is train-only")
         phase.require_hash(row["path"], row["sha256"])
         with Image.open(row["path"]) as image:
-            images.append(ImageOps.exif_transpose(image).convert("RGB"))
+            rgb = ImageOps.exif_transpose(image).convert("RGB")
+        if augment_epoch is not None:
+            from novelty import foundation_augmentation as augment
+            rgb, _ = augment.apply(rgb, seed=augment_seed, epoch=augment_epoch,
+                                   image_id=row["image_id"])
+        images.append(rgb)
     pixels = processor(images=images, return_tensors="pt")["pixel_values"]
     if not isinstance(pixels, torch.Tensor) or tuple(pixels.shape) != (len(rows), 3, 224, 224):
         raise ValueError("Official processor did not produce Bx3x224x224 pixels")
@@ -321,11 +333,16 @@ def _parameter_counts(backbone, head):
             + sum(p.numel() for p in head.parameters())}
 
 
-def _metrics(truth, probabilities, loss):
+def _classification(truth, probabilities):
     base = e1.classification(np.asarray(truth, int), np.asarray(probabilities, float))
     support = np.asarray([item["support"] for item in base["per_grade"]], dtype=float)
     scores = np.asarray([item["f1"] for item in base["per_grade"]], dtype=float)
     base["weighted_f1"] = float(np.dot(support, scores) / support.sum())
+    return base
+
+
+def _metrics(truth, probabilities, loss):
+    base = _classification(truth, probabilities)
     base["validation_loss"] = float(loss)
     return base
 
@@ -460,7 +477,7 @@ def extract_features(args):
     print(f"COMPLETE: {args.dataset} frozen vectors {len(rows)}")
 
 
-def _epochs_batches(mode, rows_by_split, processor, vectors, micro_batch, seed, epoch):
+def _epochs_batches(mode, rows_by_split, processor, vectors, micro_batch, seed, epoch, input_cache=None, experiment="B0"):
     """Yield epoch batches in deterministic order; no validation batch shuffling."""
     import torch
 
@@ -477,10 +494,34 @@ def _epochs_batches(mode, rows_by_split, processor, vectors, micro_batch, seed, 
         order = generator.permutation(n_train)
         for start in range(0, n_train, micro_batch):
             selected = [rows_by_split["train"][i] for i in order[start:start + micro_batch]]
-            yield _image_batch(selected, processor)
+            if experiment == "B1":
+                yield _image_batch(selected, processor, augment_seed=seed, augment_epoch=epoch)
+            else:
+                yield input_cache.batch(selected) if input_cache is not None else _image_batch(selected, processor)
 
 
-def _validation_batches(mode, rows_by_split, processor, vectors, micro_batch):
+def _timed_batches(batches, timings):
+    """Measure synchronous input loading without a per-batch CUDA sync."""
+    iterator = iter(batches)
+    while True:
+        started = time.perf_counter()
+        try:
+            batch = next(iterator)
+        except StopIteration:
+            return
+        timings["input_seconds"] += time.perf_counter() - started
+        yield batch
+
+
+def _process_peak_rss_bytes():
+    # Linux ru_maxrss is KiB; it is a process-lifetime peak, not an epoch peak.
+    if os.name != "posix":
+        return None
+    import resource
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+
+
+def _validation_batches(mode, rows_by_split, processor, vectors, micro_batch, input_cache=None):
     import torch
 
     offset = len(rows_by_split["train"])
@@ -490,10 +531,10 @@ def _validation_batches(mode, rows_by_split, processor, vectors, micro_batch):
             data = np.asarray(vectors[offset + start:offset + start + len(selected)]).copy()
             yield torch.from_numpy(data), torch.tensor([row["label"] for row in selected], dtype=torch.long)
         else:
-            yield _image_batch(selected, processor)
+            yield input_cache.batch(selected) if input_cache is not None else _image_batch(selected, processor)
 
 
-def _eval_epoch(backbone, head, mode, model_kind, batches, device, precision):
+def _eval_epoch(backbone, head, mode, model_kind, batches, device, precision, progress=None):
     import torch
     import torch.nn.functional as F
 
@@ -502,7 +543,7 @@ def _eval_epoch(backbone, head, mode, model_kind, batches, device, precision):
         backbone.eval()
     truths, probabilities, total_loss, count = [], [], 0.0, 0
     with torch.inference_mode():
-        for inputs, labels in batches:
+        for batch_index, (inputs, labels) in enumerate(batches):
             inputs, labels = inputs.to(device), labels.to(device)
             with _autocast(device, precision):
                 embedding = inputs if mode == "frozen" else pooled(backbone, inputs, model_kind)
@@ -512,16 +553,19 @@ def _eval_epoch(backbone, head, mode, model_kind, batches, device, precision):
                 raise ValueError("Non-finite or malformed validation output")
             total_loss += float(loss) * len(labels)
             count += len(labels)
-            truths.extend(labels.cpu().tolist())
-            probabilities.extend(logits.float().softmax(1).cpu().tolist())
+            truths.append(labels.detach())
+            probabilities.append(logits.detach().float().softmax(1))
+            if progress is not None:
+                progress.update(batch_index + 1, count, total_loss / count)
     if count == 0:
         raise ValueError("Empty validation set")
-    return _metrics(truths, probabilities, total_loss / count)
+    return _metrics(torch.cat(truths).cpu().numpy(),
+                    torch.cat(probabilities).cpu().numpy(), total_loss / count)
 
 
 def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
                  device, precision, accumulation, max_grad_norm, total_batches,
-                 total_images, micro_batch):
+                 total_images, micro_batch, progress=None, class_weights=None):
     """Each image contributes equally, including incomplete accumulation windows."""
     import torch
     import torch.nn.functional as F
@@ -531,7 +575,14 @@ def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
         backbone.train() if mode == "full" else backbone.eval()
     if total_images < 1 or total_batches != math.ceil(total_images / micro_batch):
         raise ValueError("Accumulation batch/image budget differs")
+    if class_weights is not None:
+        if len(class_weights) != 5 or any(not math.isfinite(w) or w <= 0 for w in class_weights):
+            raise ValueError("Five finite, positive training class weights are required")
+        weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
+    else:
+        weights = None
     total_loss, count, steps, window_images = 0.0, 0, 0, []
+    truths, probabilities = [], []
     optimizer.zero_grad(set_to_none=True)
     for index, (inputs, labels) in enumerate(batches):
         inputs, labels = inputs.to(device), labels.to(device)
@@ -543,7 +594,11 @@ def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
         with _autocast(device, precision):
             embedding = inputs if mode == "frozen" else pooled(backbone, inputs, model_kind)
             logits = head(embedding.float())
-            loss = F.cross_entropy(logits.float(), labels)
+            if weights is None:
+                loss = F.cross_entropy(logits.float(), labels)
+            else:
+                per_image = F.cross_entropy(logits.float(), labels, reduction="none")
+                loss = (per_image * weights[labels]).mean()
         if not torch.isfinite(loss):
             raise ValueError("Non-finite training loss")
         scaled_loss = loss * (len(labels) / window_size)
@@ -553,6 +608,10 @@ def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
             scaled_loss.backward()
         total_loss += float(loss.detach()) * len(labels)
         count += len(labels)
+        truths.append(labels.detach())
+        probabilities.append(logits.detach().float().softmax(1))
+        if progress is not None:
+            progress.update(index + 1, count, total_loss / count)
         if (index + 1) % accumulation == 0 or index + 1 == total_batches:
             if scaler is not None:
                 scaler.unscale_(optimizer)
@@ -570,15 +629,44 @@ def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
             window_images.append(window_size)
     if count != total_images or index + 1 != total_batches or sum(window_images) != total_images:
         raise ValueError("Train iterator image/batch count differs")
+    metrics = _classification(torch.cat(truths).cpu().numpy(),
+                              torch.cat(probabilities).cpu().numpy())
     return {"loss": total_loss / count, "images": count, "optimizer_steps": steps,
             "accumulation_window_images": window_images,
-            "last_window_images": window_images[-1]}
+            "last_window_images": window_images[-1], **metrics}
 
 
-def _run_metadata(args, manifest_info, snapshot, precision, feature_meta=None):
+def _class_weights(train_rows):
+    """Inverse sqrt frequency, with mean training-image weight exactly one."""
+    counts = np.bincount([row["label"] for row in train_rows], minlength=5)
+    if len(counts) != 5 or np.any(counts <= 0):
+        raise ValueError("All five grades must occur in the training split")
+    inverse = 1.0 / np.sqrt(counts.astype(np.float64))
+    weights = inverse / (np.dot(counts, inverse) / counts.sum())
+    if not np.isclose(np.dot(counts, weights) / counts.sum(), 1.0, atol=1e-12):
+        raise ValueError("Training class-weight normalization failed")
+    return counts.tolist(), weights.tolist()
+
+
+def _augmentation_metadata(experiment):
+    if experiment != "B1":
+        return None
+    from PIL import __version__ as pillow_version
+    from novelty import foundation_augmentation as augment
+    return {"protocol": augment.PROTOCOL,
+            "implementation_sha256": phase.sha256(augment.__file__),
+            "pillow_version": pillow_version}
+
+
+def _run_metadata(args, manifest_info, snapshot, precision, feature_meta=None, input_cache=None, class_weight_info=None):
     import torch
 
+    experiment = getattr(args, "experiment", "B0")
     return {"schema": SCHEMA, "dataset": args.dataset, "mode": args.mode,
+            "experiment": experiment,
+            "class_weighting": class_weight_info,
+            "training_loss": ("ordinary CE" if experiment != "B2" else
+                              "sum_i weight[label_i]*CE_i / actual window image count; validation ordinary CE"),
             "model_kind": args.model_kind,
             "manifest": manifest_info,
             "snapshot": {key: snapshot[key] for key in ("hub_id", "revision", "config_sha256",
@@ -586,6 +674,9 @@ def _run_metadata(args, manifest_info, snapshot, precision, feature_meta=None):
             "feature_cache": ({"metadata_sha256": phase.sha256(Path(args.feature_cache_dir) / "metadata.json"),
                                "rows_sha256": phase.sha256(Path(args.feature_cache_dir) / "rows.jsonl")}
                               if feature_meta is not None else None),
+            "input_cache": ({"directory": str(input_cache.root),
+                             "metadata_sha256": input_cache.meta_sha256}
+                            if input_cache is not None else None),
             "classifier": "single trainable Linear(embedding_dim,5); cross entropy",
             "selection": "max validation macro-F1; tie lower validation loss; tie earliest epoch",
             "smoke_report_sha256": phase.sha256(args.smoke_report),
@@ -594,7 +685,8 @@ def _run_metadata(args, manifest_info, snapshot, precision, feature_meta=None):
             "head_lr": args.head_lr, "backbone_lr": args.backbone_lr,
             "optimizer": "AdamW", "weight_decay": args.weight_decay,
             "max_grad_norm": args.max_grad_norm, "precision": precision,
-            "augmentation": "none; deterministic official processor for train and validation",
+            "augmentation": (_augmentation_metadata(experiment) if experiment == "B1" else
+                             "none; deterministic official processor for train and validation"),
             "device_type": args.device.split(":")[0], "torch": torch.__version__,
             "implementation_sha256": phase.sha256(__file__)}
 
@@ -661,9 +753,132 @@ def _best_is_new(metrics, prior):
     return False
 
 
+def _audit_extension(args, new_record, new_smoke, output):
+    """Verify a completed epoch-20 run without modifying any source artifact."""
+    if not getattr(args, "trust_run_checkpoint", False):
+        raise ValueError("Extension requires explicit --trust-run-checkpoint")
+    if args.mode != "full" or args.epochs != 80:
+        raise ValueError("Only completed 20-epoch full runs may extend to epoch 80")
+    old_root = phase._outside_repository(args.extend_from_run)
+    source_file = getattr(args, "source_file", None) or args.legacy_source_file
+    source_smoke = getattr(args, "source_smoke_report", None) or args.legacy_smoke_report
+    old_source = phase._outside_repository(source_file)
+    old_smoke_path = phase._outside_repository(source_smoke)
+    if (old_root == output or old_root in output.parents or output in old_root.parents
+            or not old_root.is_dir()):
+        raise ValueError("Extension output must be isolated from the completed source run")
+    source_sha = phase.sha256(old_source)
+    current_source = new_record["implementation_sha256"]
+    legacy = source_sha == LEGACY_20_SOURCE_SHA256
+    if not legacy and source_sha != current_source:
+        raise ValueError("20-epoch runner source differs from both audited legacy and current source")
+    if legacy and (new_record.get("experiment", "B0") != "B0"
+                   or new_record.get("class_weighting") is not None):
+        raise ValueError("Legacy vanilla 20-epoch run may only extend as B0")
+    old_record_path = old_root / "run.json"
+    old_record = json.loads(old_record_path.read_text(encoding="utf-8"))
+    if (old_record.get("implementation_sha256") != source_sha
+            or old_record.get("epochs") != 20 or old_record.get("mode") != "full"
+            or new_record["epochs"] != 80 or new_record["mode"] != "full"):
+        raise ValueError("Source run is not an audited completed 20-epoch full run")
+    allowed_changes = {"epochs", "smoke_report_sha256"}
+    if legacy:
+        allowed_changes.add("implementation_sha256")
+        # Older B0 records predate explicit experiment/loss fields and may add
+        # a verified deterministic input transport without changing training.
+        if old_record.get("augmentation") != new_record.get("augmentation"):
+            raise ValueError("Legacy extension changes augmentation")
+        for key, value in old_record.items():
+            if key not in allowed_changes and new_record.get(key) != value:
+                raise ValueError(f"Extension changes frozen training protocol: {key}")
+    else:
+        old_comparable = {key: value for key, value in old_record.items()
+                          if key not in allowed_changes}
+        new_comparable = {key: value for key, value in new_record.items()
+                          if key not in allowed_changes}
+        if old_comparable != new_comparable:
+            raise ValueError("Extension changes B0/B1/B2 scientific or cache configuration")
+    old_smoke_sha = phase.sha256(old_smoke_path)
+    if old_smoke_sha != old_record.get("smoke_report_sha256"):
+        raise ValueError("Original smoke report hash differs")
+    old_smoke = json.loads(old_smoke_path.read_text(encoding="utf-8"))
+    if (old_smoke.get("effective_processor") != new_smoke.get("effective_processor")
+            or old_smoke.get("batch_size") != new_smoke.get("batch_size")
+            or old_smoke.get("precision") != new_smoke.get("precision")
+            or old_smoke.get("snapshot_weight_sha256") != new_smoke.get("snapshot_weight_sha256")
+            or old_smoke.get("experiment", "B0") != new_smoke.get("experiment", "B0")
+            or old_smoke.get("augmentation") != new_smoke.get("augmentation")
+            or old_smoke.get("class_weighting") != new_smoke.get("class_weighting")):
+        raise ValueError("Official processor or smoke protocol differs from original run")
+    last_path, best_path = _checkpoint_path(old_root, "last"), _checkpoint_path(old_root, "best")
+    old_last = _load_checkpoint(last_path, trust=True)
+    old_best = _load_checkpoint(best_path, trust=True)
+    history_path, summary_path = old_root / "history.json", old_root / "summary.json"
+    history = json.loads(history_path.read_text(encoding="utf-8"))
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    selected = None
+    for row in history:
+        validation = row["validation"]
+        if _best_is_new(validation, selected["validation"] if selected else None):
+            selected = {"epoch": row["epoch"], "validation": validation}
+    if (selected != old_last.get("best")
+            or old_last.get("record") != old_record or old_best.get("record") != old_record
+            or old_last.get("epoch") != 20 or len(old_last.get("history", [])) != 20
+            or history != old_last["history"] or [row["epoch"] for row in history] != list(range(1, 21))
+            or old_last.get("best") != summary.get("best")
+            or old_best.get("best") != old_last.get("best")
+            or old_best.get("epoch") != old_last["best"]["epoch"]
+            or summary.get("status") != "VALIDATION_COMPLETE"
+            or summary.get("epochs_completed") != 20
+            or summary.get("record") != old_record
+            or old_last.get("optimizer") is None or old_last.get("rng") is None
+            or old_last.get("backbone") is None or old_last.get("head") is None):
+        raise ValueError("Original 20-epoch history/checkpoint/optimizer provenance differs")
+    info = {"source_run": str(old_root), "source_run_json_sha256": phase.sha256(old_record_path),
+            "source_last_sha256": phase.sha256(last_path),
+            "source_best_sha256": phase.sha256(best_path),
+            "source_history_sha256": phase.sha256(history_path),
+            "source_summary_sha256": phase.sha256(summary_path),
+            "source_smoke_sha256": old_smoke_sha, "source_smoke_path": str(old_smoke_path),
+            "source_runner_sha256": source_sha, "source_runner_path": str(old_source),
+            "completed_epochs": 20,
+            "optimizer_and_rng_carried_forward": True}
+    return info, old_last, old_best
+
+
+def _initialize_extension(output, record, old_last, old_best):
+    """Create an isolated continuation directory; source checkpoints remain untouched."""
+    stage = output.with_name(output.name + f".extension-{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    stage.mkdir(parents=True, exist_ok=False)
+    last = {**old_last, "record": record}
+    best = {**old_best, "record": record}
+    _atomic_json(stage / "run.json", record)
+    _save_checkpoint(_checkpoint_path(stage, "last"), last)
+    _save_checkpoint(_checkpoint_path(stage, "best"), best)
+    _atomic_json(stage / "history.json", old_last["history"])
+    _atomic_json(stage / "milestones.json", _milestones(old_last["history"]))
+    source = Path(record["extension_from"]["source_run"])
+    for name, key in (("run.json", "source_run_json_sha256"),
+                      ("last.pt", "source_last_sha256"),
+                      ("best.pt", "source_best_sha256"),
+                      ("history.json", "source_history_sha256"),
+                      ("summary.json", "source_summary_sha256")):
+        if phase.sha256(source / name) != record["extension_from"][key]:
+            raise ValueError("Source run changed during extension initialization")
+    for path_key, hash_key in (("source_runner_path", "source_runner_sha256"),
+                               ("source_smoke_path", "source_smoke_sha256")):
+        if phase.sha256(record["extension_from"][path_key]) != record["extension_from"][hash_key]:
+            raise ValueError("Source code or smoke changed during extension initialization")
+    os.replace(stage, output)
+
+
 def train(args):
     import torch
+    from novelty import foundation_reporting as reporting
 
+    experiment = getattr(args, "experiment", "B0")
+    if experiment not in {"B0", "B1", "B2"} or (experiment != "B0" and args.mode != "full"):
+        raise ValueError("B1/B2 are independent full-fine-tuning configurations only")
     if (args.mode not in {"frozen", "partial", "full"} or args.epochs < 1 or args.micro_batch < 1
             or args.accumulation < 1 or args.seed < 0 or args.head_lr <= 0
             or args.backbone_lr <= 0 or args.weight_decay < 0 or args.max_grad_norm <= 0):
@@ -675,27 +890,56 @@ def train(args):
         raise ValueError("Full tuning requires micro-batch 1/4/8/16/32 and effective batch 32")
     if args.mode == "frozen" and not args.feature_cache_dir:
         raise ValueError("Frozen linear probe requires the persistent feature cache")
+    input_cache_dir = getattr(args, "input_cache_dir", None)
+    if input_cache_dir and args.mode != "full":
+        raise ValueError("Official-input cache is supported only for full fine-tuning")
     rows_by_split, manifest_info = load_train_val_manifest(args.artifact_root, args.dataset)
     rows = rows_by_split["train"] + rows_by_split["val"]
     snapshot = audit_snapshot(args.model_kind, args.model_dir, args.revision, args.weight_sha256)
     protected = [Path(args.artifact_root) / "datasets", args.model_dir]
     if args.feature_cache_dir:
         protected.append(args.feature_cache_dir)
+    if input_cache_dir:
+        protected.append(input_cache_dir)
+    extend_from = getattr(args, "extend_from_run", None)
+    if extend_from:
+        if (not (getattr(args, "source_file", None) or getattr(args, "legacy_source_file", None))
+                or not (getattr(args, "source_smoke_report", None)
+                        or getattr(args, "legacy_smoke_report", None))):
+            raise ValueError("Extension requires source file and source smoke report")
+        protected.append(extend_from)
     output = _safe_out(args.output_dir, protected)
     if output.exists() and not args.resume:
         raise FileExistsError("Run output exists; use --resume for identical configuration")
+    if output.exists() and args.resume:
+        existing_record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        if existing_record.get("extension_from") and not extend_from:
+            raise ValueError("Extension resume requires the original --extend-from-run provenance flags")
     _seed(args.seed)
     device = torch.device(args.device)
     if device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable")
     precision = _precision(device, args.precision)
-    vectors = processor = backbone = feature_meta = None
+    vectors = processor = backbone = feature_meta = input_cache = None
     if args.mode == "frozen":
         vectors, feature_meta = _feature_cache(args, rows, manifest_info, snapshot)
     else:
         backbone, processor = load_local_backbone(snapshot, trust_legacy_bin=args.trust_legacy_bin)
         configure_trainable(backbone, args.model_kind, args.mode)
         backbone.to(device)
+        if input_cache_dir:
+            from novelty import foundation_input_cache as inputs
+            expected = inputs.metadata(snapshot, manifest_info, processor, args.micro_batch,
+                                       phase.sha256(__file__))
+            input_cache = inputs.InputCache(input_cache_dir, expected)
+            report = json.loads((input_cache.root / "summary.json").read_text(encoding="utf-8"))
+            if (report.get("status") != "COMPLETE"
+                    or report.get("metadata_sha256") != input_cache.meta_sha256
+                    or report.get("row_count") != len(rows)):
+                raise ValueError("Official-input cache is incomplete or differs")
+            for split in ("train", "val"):
+                for start in range(0, len(rows_by_split[split]), args.micro_batch):
+                    input_cache.batch(rows_by_split[split][start:start + args.micro_batch])
     head = torch.nn.Linear(MODELS[args.model_kind]["dimension"], 5).to(device)
     groups = [{"params": list(head.parameters()), "lr": args.head_lr}]
     if backbone is not None:
@@ -703,7 +947,13 @@ def train(args):
                           "lr": args.backbone_lr})
     optimizer = torch.optim.AdamW(groups, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16") if precision == "fp16" else None
-    record = _run_metadata(args, manifest_info, snapshot, precision, feature_meta)
+    weight_counts, class_weights = (_class_weights(rows_by_split["train"])
+                                    if experiment == "B2" else (None, None))
+    class_weight_info = ({"formula": "w_c=(n_c^-0.5)/(sum_j n_j*n_j^-0.5 / N_train)",
+                          "train_counts": weight_counts, "weights": class_weights}
+                         if experiment == "B2" else None)
+    record = _run_metadata(args, manifest_info, snapshot, precision, feature_meta,
+                           input_cache, class_weight_info)
     smoke = json.loads(Path(args.smoke_report).read_text(encoding="utf-8"))
     if (smoke.get("schema") != SCHEMA or smoke.get("status") != "BATCH_SMOKE_PASS"
             or smoke.get("optimizer_steps") != 2 or smoke.get("weights_saved") is not False
@@ -715,8 +965,19 @@ def train(args):
             or smoke.get("manifest_sha256") != manifest_info["manifest_sha256"]
             or smoke.get("device_type") != device.type or smoke.get("batch_size") != args.micro_batch
             or smoke.get("precision") != precision
-            or smoke.get("implementation_sha256") != phase.sha256(__file__)):
+            or smoke.get("implementation_sha256") != phase.sha256(__file__)
+            or smoke.get("experiment", "B0") != experiment
+            or (experiment == "B2" and smoke.get("class_weighting") != class_weight_info)
+            or (experiment == "B1" and smoke.get("augmentation") != record["augmentation"])):
         raise ValueError("Matching two-step smoke report is absent or differs from this run")
+    if extend_from:
+        info, old_last, old_best = _audit_extension(args, record, smoke, output)
+        record["extension_from"] = info
+        if not output.exists():
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _initialize_extension(output, record, old_last, old_best)
+        elif not args.resume:
+            raise FileExistsError("Extension output exists; use guarded --resume")
     if output.exists():
         if json.loads((output / "run.json").read_text(encoding="utf-8")) != record:
             raise ValueError("Run protocol/provenance differs; refuse resume")
@@ -748,24 +1009,52 @@ def train(args):
         output.mkdir(parents=True)
         _atomic_json(output / "run.json", record)
         history, best, start_epoch = [], None, 1
+    logger = reporting.RunLogger(output)
+    logger.line(f"run={args.dataset}/{args.model_kind}/{args.mode} "
+                f"epochs={args.epochs} starting_epoch={start_epoch} "
+                f"resume={bool(args.resume)} source_sha256={phase.sha256(__file__)}")
     n_batches = math.ceil(len(rows_by_split["train"]) / args.micro_batch)
+    n_validation_batches = math.ceil(len(rows_by_split["val"]) / args.micro_batch)
     for epoch in range(start_epoch, args.epochs + 1):
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         start = time.perf_counter()
-        train_info = _train_epoch(backbone, head, args.mode, args.model_kind,
-                                  _epochs_batches(args.mode, rows_by_split, processor, vectors,
-                                                  args.micro_batch, args.seed, epoch),
-                                  optimizer, scaler, device, precision, args.accumulation,
-                                  args.max_grad_norm, n_batches, len(rows_by_split["train"]),
-                                  args.micro_batch)
+        cpu_start = time.process_time()
+        train_input = {"input_seconds": 0.0}
+        validation_input = {"input_seconds": 0.0}
+        train_progress = reporting.BatchProgress(
+            logger, "train", epoch, n_batches, len(rows_by_split["train"]))
+        try:
+            train_info = _train_epoch(backbone, head, args.mode, args.model_kind,
+                                      _timed_batches(
+                                          _epochs_batches(args.mode, rows_by_split, processor, vectors,
+                                                          args.micro_batch, args.seed, epoch, input_cache,
+                                                          experiment), train_input),
+                                      optimizer, scaler, device, precision, args.accumulation,
+                                      args.max_grad_norm, n_batches, len(rows_by_split["train"]),
+                                      args.micro_batch, train_progress, class_weights)
+        finally:
+            train_progress.close()
         train_seconds = time.perf_counter() - start
         start = time.perf_counter()
-        validation = _eval_epoch(backbone, head, args.mode, args.model_kind,
-                                 _validation_batches(args.mode, rows_by_split, processor, vectors,
-                                                     args.micro_batch), device, precision)
+        validation_progress = reporting.BatchProgress(
+            logger, "validation", epoch, n_validation_batches, len(rows_by_split["val"]))
+        try:
+            validation = _eval_epoch(
+                backbone, head, args.mode, args.model_kind,
+                _timed_batches(
+                    _validation_batches(args.mode, rows_by_split, processor, vectors,
+                                        args.micro_batch, input_cache), validation_input),
+                device, precision, validation_progress)
+        finally:
+            validation_progress.close()
         validation_seconds = time.perf_counter() - start
         resource = {"train_seconds": train_seconds, "validation_seconds": validation_seconds,
+                    "train_input_seconds": train_input["input_seconds"],
+                    "validation_input_seconds": validation_input["input_seconds"],
+                    "process_cpu_seconds": time.process_time() - cpu_start,
+                    "process_peak_rss_bytes": _process_peak_rss_bytes(),
+                    "validation_images_per_second": len(rows_by_split["val"]) / validation_seconds,
                     "train_images_per_second": train_info["images"] / train_seconds,
                     "gpu_peak_allocated_bytes": (torch.cuda.max_memory_allocated(device)
                                                  if device.type == "cuda" else None),
@@ -776,12 +1065,15 @@ def train(args):
                                                    if device.type == "cuda" else None),
                     "gpu_total_bytes": (torch.cuda.mem_get_info(device)[1]
                                         if device.type == "cuda" else None)}
-        current = {"epoch": epoch, "train": train_info, "validation": validation,
-                   "resource": resource}
-        history.append(current)
         improved = _best_is_new(validation, best["validation"] if best else None)
         if improved:
             best = {"epoch": epoch, "validation": validation}
+        learning_rates = {"head": optimizer.param_groups[-1]["lr"],
+                          "backbone": optimizer.param_groups[0]["lr"] if backbone is not None else None}
+        current = {"epoch": epoch, "train": train_info, "validation": validation,
+                   "resource": resource, "learning_rates": learning_rates,
+                   "best_epoch": best["epoch"], "best_updated": improved}
+        history.append(current)
         state = {"record": record, "epoch": epoch, "head": head.state_dict(),
                  "backbone": backbone.state_dict() if backbone is not None else None,
                  "optimizer": optimizer.state_dict(), "scaler": scaler.state_dict() if scaler is not None else None,
@@ -790,8 +1082,10 @@ def train(args):
         if improved:
             _save_checkpoint(_checkpoint_path(output, "best"), state)
         _atomic_json(output / "history.json", history)
-        print(f"{args.dataset} {args.model_kind} {args.mode} epoch {epoch}/{args.epochs}: "
-              f"validation macro-F1={validation['macro_f1']:.4f}", flush=True)
+        _atomic_json(output / "milestones.json", _milestones(history))
+        reporting.write_history_csv(output / "history.csv", history)
+        for line in reporting.epoch_lines(current, best, improved, learning_rates):
+            logger.line(line)
     if len(history) == args.epochs:
         _atomic_json(output / "summary.json", {"status": "VALIDATION_COMPLETE", "record": record,
                                                 "best": best, "parameter_counts":
@@ -801,7 +1095,12 @@ def train(args):
                                                  "head_total": sum(p.numel() for p in head.parameters()),
                                                  "total_trainable": sum(p.numel() for p in head.parameters())},
                                                 "epochs_completed": len(history),
+                                                "milestones": _milestones(history),
                                                 "final_test_status": "NOT_ACCESSED"})
+        reporting.learning_curves(output / "learning_curves.svg", history)
+        logger.line(f"complete best_epoch={best['epoch']} "
+                    f"best_validation_macro_f1={best['validation']['macro_f1']:.6f}")
+    logger.close()
 
 
 def smoke(args):
@@ -813,6 +1112,9 @@ def smoke(args):
     import torch
     import torch.nn.functional as F
 
+    experiment = getattr(args, "experiment", "B0")
+    if experiment not in {"B0", "B1", "B2"} or (experiment != "B0" and args.mode != "full"):
+        raise ValueError("B1/B2 smoke requires full fine-tuning")
     if args.mode not in {"frozen", "partial", "full"}:
         raise ValueError("Smoke mode must be frozen, partial, or full")
     batch_size = getattr(args, "batch_size", 1)
@@ -838,7 +1140,13 @@ def smoke(args):
     parameters = list(head.parameters()) + [p for p in backbone.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(parameters, lr=1e-4)
     scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16") if precision == "fp16" else None
-    pixels, labels = _image_batch(rows_by_split["train"][:batch_size], processor)
+    class_counts, class_weights = (_class_weights(rows_by_split["train"])
+                                   if experiment == "B2" else (None, None))
+    if experiment == "B1":
+        pixels, labels = _image_batch(rows_by_split["train"][:batch_size], processor,
+                                      augment_seed=args.seed, augment_epoch=1)
+    else:
+        pixels, labels = _image_batch(rows_by_split["train"][:batch_size], processor)
     pixels, labels = pixels.to(device), labels.to(device)
     if device.type == "cuda":
         torch.cuda.synchronize(device)
@@ -855,7 +1163,12 @@ def smoke(args):
                     embedding = pooled(backbone, pixels, args.model_kind)
             else:
                 embedding = pooled(backbone, pixels, args.model_kind)
-            loss = F.cross_entropy(head(embedding.float()).float(), labels)
+            logits = head(embedding.float()).float()
+            if class_weights is None:
+                loss = F.cross_entropy(logits, labels)
+            else:
+                weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
+                loss = (F.cross_entropy(logits, labels, reduction="none") * weights[labels]).mean()
         if not torch.isfinite(loss):
             raise ValueError("Non-finite smoke loss")
         if scaler is not None:
@@ -865,6 +1178,16 @@ def smoke(args):
             loss.backward()
         if any(p.grad is not None and not bool(torch.isfinite(p.grad).all()) for p in parameters):
             raise ValueError("Non-finite smoke gradient")
+        if args.mode == "full":
+            missing_gradients = [name for name, parameter in backbone.named_parameters()
+                                 if parameter.requires_grad and parameter.grad is None]
+            allowed_missing = ({"embeddings.mask_token"}
+                               if args.model_kind == "dinov3_vits16" else set())
+            if set(missing_gradients) - allowed_missing:
+                raise ValueError("Unexpected full-backbone parameters received no gradient: "
+                                 + ", ".join(sorted(set(missing_gradients) - allowed_missing)))
+            if any(parameter.grad is None for parameter in head.parameters()):
+                raise ValueError("Full-tuning head received no gradient")
         if scaler is not None:
             scaler.step(optimizer)
             scaler.update()
@@ -875,6 +1198,11 @@ def smoke(args):
     elapsed = time.perf_counter() - started
     report = {"schema": SCHEMA, "status": "BATCH_SMOKE_PASS", "dataset": args.dataset,
               "model_kind": args.model_kind, "mode": args.mode,
+              "experiment": experiment,
+              "augmentation": _augmentation_metadata(experiment),
+              "class_weighting": ({"formula": "w_c=(n_c^-0.5)/(sum_j n_j*n_j^-0.5 / N_train)",
+                                   "train_counts": class_counts, "weights": class_weights}
+                                  if experiment == "B2" else None),
               "snapshot_weight_sha256": snapshot["weight_sha256"],
               "snapshot_revision": snapshot["revision"],
               "manifest_sha256": manifest_info["manifest_sha256"],
@@ -892,6 +1220,7 @@ def smoke(args):
               "gpu_total_bytes": total_bytes,
               "elapsed_seconds": elapsed, "images_per_second": 2 * batch_size / elapsed,
               "optimizer_steps": 2, "weights_saved": False,
+              "unused_trainable_backbone_parameters": missing_gradients if args.mode == "full" else [],
               "implementation_sha256": phase.sha256(__file__)}
     output.mkdir(parents=True)
     _atomic_json(output / "smoke.json", report)
@@ -1027,10 +1356,53 @@ def sensitivity(args):
     print(f"COMPLETE: {args.dataset} exploratory E3 pilot sensitivity for {args.model_kind}")
 
 
+def _milestones(history):
+    return {str(row["epoch"]): {"train": row["train"], "validation": row["validation"],
+                                "resource": row["resource"]}
+            for row in history if row["epoch"] in {20, 40, 60, 80}}
+
+
+def prepare_input_cache(args):
+    """Manual cold/warm cache preparation; no model forward or test access."""
+    from novelty import foundation_input_cache as inputs
+
+    rows_by_split, manifest_info = load_train_val_manifest(args.artifact_root, args.dataset)
+    snapshot = audit_snapshot(args.model_kind, args.model_dir, args.revision, args.weight_sha256)
+    root = _safe_out(args.input_cache_dir, [Path(args.artifact_root) / "datasets", args.model_dir])
+    if root.exists() and not args.resume:
+        raise FileExistsError("Input cache exists; use --resume with identical provenance")
+    processor = load_local_processor(snapshot)
+    expected = inputs.metadata(snapshot, manifest_info, processor, args.batch_size,
+                               phase.sha256(__file__))
+    cache = inputs.InputCache(root, expected, create=not root.exists())
+    report = inputs.prepare(cache, rows_by_split, args.batch_size,
+                            lambda batch: _image_batch(batch, processor),
+                            verify_equivalence=args.verify_equivalence)
+    print(json.dumps(report, indent=2))
+
+
+def inspect_augmentation(args):
+    """Inspect B1 train-only transforms without loading model weights or writing in Git."""
+    from novelty import foundation_augmentation as augment
+    rows, manifest = load_train_val_manifest(args.artifact_root, args.dataset)
+    snapshot = audit_snapshot(args.model_kind, args.model_dir, args.revision, args.weight_sha256)
+    processor = load_local_processor(snapshot)
+    report = augment.inspect_gallery(rows["train"], processor, args.output_dir,
+                                     seed=args.seed, epoch=args.epoch,
+                                     samples_per_grade=args.samples_per_grade)
+    report["dataset"] = args.dataset
+    report["manifest_sha256"] = manifest["manifest_sha256"]
+    report["processor_config_sha256"] = snapshot["processor_config_sha256"]
+    report["augmentation_implementation_sha256"] = phase.sha256(augment.__file__)
+    _atomic_json(Path(args.output_dir) / "augmentation_gallery.json", report)
+    print(json.dumps({"status": "COMPLETE", "images": len(report["rows"]),
+                      "output_dir": str(args.output_dir)}, indent=2))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("preflight", "smoke", "extract", "train", "sensitivity"):
+    for name in ("preflight", "smoke", "extract", "train", "sensitivity", "prepare-input-cache", "inspect-augmentation"):
         sub = commands.add_parser(name)
         sub.add_argument("--dataset", choices=tuple(phase.SPECS), required=True)
         sub.add_argument("--artifact-root", required=True)
@@ -1042,20 +1414,37 @@ def main(argv=None):
             sub.add_argument("--device", default="cuda:0")
             sub.add_argument("--seed", type=int, default=42)
             sub.add_argument("--trust-legacy-bin", action="store_true")
+        if name in {"smoke", "train"}:
+            sub.add_argument("--experiment", choices=("B0", "B1", "B2"), default="B0")
         if name == "smoke":
             sub.add_argument("--mode", choices=("full", "frozen", "partial"), required=True)
             sub.add_argument("--batch-size", type=int, default=1)
             sub.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto")
             sub.add_argument("--output-dir", required=True)
+        elif name == "inspect-augmentation":
+            sub.add_argument("--output-dir", required=True)
+            sub.add_argument("--epoch", type=int, default=1)
+            sub.add_argument("--samples-per-grade", type=int, default=3)
+        elif name == "prepare-input-cache":
+            sub.add_argument("--input-cache-dir", required=True)
+            sub.add_argument("--batch-size", type=int, required=True)
+            sub.add_argument("--resume", action="store_true")
+            sub.add_argument("--verify-equivalence", action="store_true")
         elif name == "extract":
             sub.add_argument("--feature-cache-dir", required=True)
             sub.add_argument("--resume", action="store_true")
         elif name == "train":
             sub.add_argument("--mode", choices=("full", "frozen", "partial"), required=True)
             sub.add_argument("--feature-cache-dir")
+            sub.add_argument("--input-cache-dir")
             sub.add_argument("--smoke-report", required=True)
             sub.add_argument("--output-dir", required=True)
             sub.add_argument("--epochs", type=int, default=20)
+            sub.add_argument("--extend-from-run")
+            sub.add_argument("--legacy-source-file")
+            sub.add_argument("--legacy-smoke-report")
+            sub.add_argument("--source-file")
+            sub.add_argument("--source-smoke-report")
             sub.add_argument("--micro-batch", type=int, default=1)
             sub.add_argument("--accumulation", type=int, default=32)
             sub.add_argument("--head-lr", type=float, default=1e-3)
@@ -1073,7 +1462,9 @@ def main(argv=None):
             sub.add_argument("--trust-run-checkpoint", action="store_true")
     args = parser.parse_args(argv)
     {"preflight": preflight, "smoke": smoke, "extract": extract_features,
-     "train": train, "sensitivity": sensitivity}[args.command](args)
+     "train": train, "sensitivity": sensitivity,
+     "prepare-input-cache": prepare_input_cache,
+     "inspect-augmentation": inspect_augmentation}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import torch
 from PIL import Image
 
 from novelty import foundation_adaptation as fa
+from novelty import foundation_input_cache as fic
 from novelty import preof_e3 as e3
 from novelty import preof_phase1 as phase
 
@@ -179,6 +180,17 @@ class FoundationAdaptationTests(unittest.TestCase):
                 self.assertEqual(result["epochs_completed"], 2)
                 self.assertEqual(result["parameter_counts"]["backbone_total"], 21_000_000)
                 self.assertEqual(result["final_test_status"], "NOT_ACCESSED")
+                self.assertTrue((root / "run" / "learning_curves.svg").is_file())
+                self.assertIn("<svg", (root / "run" / "learning_curves.svg").read_text())
+                self.assertIn("macro-F1", (root / "run" / "training.log").read_text())
+                import csv
+                with (root / "run" / "history.csv").open(newline="", encoding="utf-8") as stream:
+                    csv_rows = list(csv.DictReader(stream))
+                self.assertEqual(len(csv_rows), 2)
+                self.assertEqual(json.loads(csv_rows[0]["validation_confusion_matrix_json"]),
+                                 json.loads((root / "run" / "history.json").read_text())
+                                 [0]["validation"]["confusion_matrix"])
+                self.assertNotEqual(csv_rows[0]["train_accuracy"], "")
                 args.resume, args.trust_run_checkpoint = True, True
                 fa.train(args)
                 self.assertEqual(len(json.loads((root / "run" / "history.json").read_text())), 2)
@@ -243,6 +255,7 @@ class FoundationAdaptationTests(unittest.TestCase):
             self.assertGreater(result["parameter_counts"]["backbone_trainable"], 0)
             self.assertEqual(result["epochs_completed"], 1)
             self.assertNotIn(True, backbone.training_modes)
+            self.assertEqual(len(backbone.training_modes), 10)
 
             full_backbone = TinyBackbone()
             args.mode, args.accumulation = "full", 32
@@ -265,7 +278,13 @@ class FoundationAdaptationTests(unittest.TestCase):
             self.assertEqual(history[0]["train"]["accumulation_window_images"], [5])
             self.assertIn(True, full_backbone.training_modes)
             self.assertIn(False, full_backbone.training_modes)
+            self.assertEqual(len(full_backbone.training_modes), 10)
             self.assertEqual(summary["final_test_status"], "NOT_ACCESSED")
+            self.assertEqual(len(history[0]["train"]["confusion_matrix"]), 5)
+            self.assertIn("accuracy", history[0]["train"])
+            self.assertEqual(history[0]["best_epoch"], 1)
+            self.assertEqual(history[0]["learning_rates"],
+                             {"head": 1e-3, "backbone": 1e-5})
 
     def test_accumulation_matches_image_weighted_large_batches(self):
         for n, micro, accumulation, expected in ((7, 2, 2, [4, 3]), (5, 1, 4, [4, 1])):
@@ -350,6 +369,100 @@ class FoundationAdaptationTests(unittest.TestCase):
         args.accumulation, args.feature_cache_dir = 8, "forbidden"
         with self.assertRaisesRegex(ValueError, "frozen embeddings"):
             fa.train(args)
+
+    def test_official_input_cache_exactness_warm_read_and_corruption(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            rows = {"train": [{"split": "train", "image_id": f"t{i}",
+                               "sha256": f"{i:064x}", "label": i} for i in range(3)],
+                    "val": [{"split": "val", "image_id": "v0",
+                             "sha256": f"{10:064x}", "label": 4}]}
+            expected = {"verification_batch_size": 2, "model_kind": "synthetic"}
+            cache = fic.InputCache(root / "input_cache", expected, create=True)
+            def uncached(selected):
+                pixels = torch.stack([torch.full((3, 224, 224), float(row["label"]))
+                                      for row in selected])
+                return pixels, torch.tensor([row["label"] for row in selected])
+            cold = fic.prepare(cache, rows, 2, uncached)
+            self.assertEqual(cold["counts"]["cold_images"], 4)
+            self.assertEqual(cold["counts"]["exact_compared_images"], 4)
+            self.assertEqual(cache.batch(rows["train"][:2])[0].shape, (2, 3, 224, 224))
+            warm = fic.prepare(cache, rows, 2, uncached)
+            self.assertEqual(warm["counts"]["warm_images"], 4)
+            self.assertEqual(warm["first_cold_measurement"]["images"], 4)
+            verified = fic.prepare(cache, rows, 2, uncached, verify_equivalence=True)
+            self.assertEqual(verified["counts"]["exact_compared_images"], 4)
+            def changed(selected):
+                pixels, labels = uncached(selected)
+                return pixels + 1, labels
+            with self.assertRaisesRegex(ValueError, "differ exactly"):
+                fic.prepare(cache, rows, 2, changed, verify_equivalence=True)
+            data, _ = cache._paths(rows["train"][0])
+            with data.open("ab") as stream:
+                stream.write(b"corrupt")
+            with self.assertRaisesRegex(ValueError, "hash differs"):
+                cache.read(rows["train"][0])
+
+    def test_epoch20_extension_is_isolated_and_guarded(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            source_code = root / "old_runner.py"
+            source_code.write_bytes(b"audited synthetic old source")
+            source_sha = phase.sha256(source_code)
+            old_smoke_path = root / "old_smoke.json"
+            old_smoke = {"effective_processor": {"size": 224}, "batch_size": 4,
+                         "precision": "bf16", "snapshot_weight_sha256": "a" * 64}
+            old_smoke_path.write_text(json.dumps(old_smoke), encoding="utf-8")
+            original = root / "completed_20"
+            original.mkdir()
+            old_record = {"epochs": 20, "mode": "full", "dataset": "DDR",
+                          "micro_batch": 4, "implementation_sha256": source_sha,
+                          "smoke_report_sha256": phase.sha256(old_smoke_path)}
+            new_record = {**old_record, "epochs": 80,
+                          "implementation_sha256": "f" * 64,
+                          "smoke_report_sha256": "e" * 64,
+                          "input_cache": {"metadata_sha256": "d" * 64}}
+            (original / "run.json").write_text(json.dumps(old_record), encoding="utf-8")
+            history = [{"epoch": epoch, "train": {"loss": 1.},
+                        "validation": {"macro_f1": .7 if epoch == 10 else .5,
+                                       "validation_loss": .4 if epoch == 10 else .6},
+                        "resource": {}}
+                       for epoch in range(1, 21)]
+            best = {"epoch": 10, "validation": history[9]["validation"]}
+            last_state = {"record": old_record, "epoch": 20, "history": history,
+                          "best": best, "optimizer": {"state": 1}, "rng": {"state": 2},
+                          "backbone": {"weight": torch.ones(1)}, "head": {"weight": torch.ones(1)}}
+            best_state = {**last_state, "epoch": 10, "history": history[:10]}
+            fa._save_checkpoint(original / "last.pt", last_state)
+            fa._save_checkpoint(original / "best.pt", best_state)
+            (original / "history.json").write_text(json.dumps(history), encoding="utf-8")
+            (original / "summary.json").write_text(json.dumps({
+                "status": "VALIDATION_COMPLETE", "record": old_record, "best": best,
+                "epochs_completed": 20}), encoding="utf-8")
+            original_hash = phase.sha256(original / "last.pt")
+            args = SimpleNamespace(trust_run_checkpoint=True, mode="full", epochs=80,
+                                   extend_from_run=str(original),
+                                   legacy_source_file=str(source_code),
+                                   legacy_smoke_report=str(old_smoke_path))
+            output = root / "continuation_80"
+            with patch.object(fa, "LEGACY_20_SOURCE_SHA256", source_sha):
+                info, old_last, old_best = fa._audit_extension(
+                    args, new_record, old_smoke, output)
+                new_record["extension_from"] = info
+                fa._initialize_extension(output, new_record, old_last, old_best)
+                self.assertEqual(phase.sha256(original / "last.pt"), original_hash)
+                self.assertEqual(fa._load_checkpoint(output / "last.pt", trust=True)["epoch"], 20)
+                self.assertIn("20", json.loads((output / "milestones.json").read_text()))
+                milestone_rows = [{"epoch": epoch, "train": {"loss": float(epoch)},
+                                   "validation": {"macro_f1": epoch / 100},
+                                   "resource": {"seconds": epoch}}
+                                  for epoch in range(1, 81)]
+                milestones = fa._milestones(milestone_rows)
+                self.assertEqual(list(milestones), ["20", "40", "60", "80"])
+                self.assertEqual(milestones["60"]["validation"]["macro_f1"], .6)
+                old_smoke_path.write_text("{}")
+                with self.assertRaisesRegex(ValueError, "smoke report hash differs"):
+                    fa._audit_extension(args, new_record, old_smoke, root / "other")
 
     def test_e3_sensitivity_uses_exact_validation_pilot_only(self):
         with TemporaryDirectory() as temp:
