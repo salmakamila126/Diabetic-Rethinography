@@ -16,15 +16,19 @@ The public ConvNeXt revision visible in the [official Hub commit](https://huggin
 
 `transformers==4.57.3` is deliberately pinned. Its [DINOv3 implementation](https://github.com/huggingface/transformers/blob/v4.57.3/src/transformers/models/dinov3_vit/modeling_dinov3_vit.py) exposes twelve blocks as `backbone.layer[0:12]`, final `norm`, and CLS `pooler_output`. The ViT path requests eager attention for a fixed implementation choice. The [ConvNeXt implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/convnext/modeling_convnext.py) exposes `encoder.stages`, three blocks in the final stage, and final `layernorm`; the code checks that layout at runtime. A future library version may have different module names, so it is rejected until re-audited. PyTorch 2.7.1 CUDA wheels are documented in the [official prior-version installation guide](https://pytorch.org/get-started/previous-versions/). The new environment must be separate from reproduction's `.venv`.
 
-## Frozen train/validation design
+## Shared train/validation design and primary full fine-tuning
 
 The existing SHA-256-pinned APTOS2019 and DDR CSV manifests are parsed only for `train` and `val` records; the entire file is hashed as bytes, while test labels and images are not used. Metadata root/seed, row validity, unique IDs/paths, train/validation group separation, content-hash separation, grade support and **every train/validation image SHA-256** are checked before work. Images are decoded with PIL, EXIF-transposed, converted to RGB, then passed to each model's pinned **official processor**. No CAD-ViT crop/blur, BG enhancement, gamma, CLAHE, random flip, or other enhancement augmentation is used in the initial baseline. The effective processor dictionary and hashes are recorded. The one trainable head is `Linear(d,5)` with ordinary cross entropy; no ImageNet classifier is reused.
 
 `extract` uses a frozen backbone in `eval()`/`inference_mode()`, writes only the official `pooler_output` as `float32`, and never stores full feature maps. One `features.npy` memmap contains train rows followed by validation rows. The append-only `rows.jsonl` binds split, image, grade, group, source-image hash, and vector hash to each row. `metadata.json` binds manifest, model revision/weight/config, processor, runtime, feature dimension, and implementation hash. Resume validates the entire saved prefix and fails on corruption. **Only `mode=frozen` consumes this cache.** Partial fine-tuning reads and reprocesses train/validation images each epoch, so it cannot silently use stale frozen embeddings.
 
-The prespecified partial mode unfreezes ViT-S **blocks 10–11 plus final norm**, or ConvNeXt-T **the last two residual blocks of stage 3 plus final layer norm**. All earlier backbone parameters remain frozen. The backbone stays in eval behavior while gradients flow through the selected blocks. This avoids stochastic changes in frozen modules; there is no training augmentation in this first protocol. Optional DINOv3 ConvNeXt partial tuning fails closed until its final-block structure is audited. `peft` is an explicit unimplemented extension point: any LoRA/adapters require separate module, rank, parameter-budget, prior-art and confirmation review.
+**Primary protocol: conventional full fine-tuning.** For the two primary backbones, `mode=full` loads the hash-checked original official pretrained weights, discards any pretrained classifier, initializes a seeded five-class `Linear(d,5)` head, and makes **every backbone and head parameter trainable**. The backbone uses training mode during each train epoch and eval mode for validation. AdamW has separate backbone and head parameter groups with configurable learning rates. Full mode reads images through the official processor on every epoch and rejects any frozen-feature-cache argument. The optional DINOv3 ConvNeXt comparator is excluded from full tuning pending its own audit.
 
-Default comparison budget: **seed 42, 20 epochs, micro-batch 1, accumulation 32, effective batch 32, AdamW, weight decay .01, head LR 1e-3, partial-backbone LR 1e-5, grad clip 1.0, no early stopping**. Operators may change these flags only as separately named protocols. Each epoch uses deterministic train order; validation remains unaugmented. CUDA `auto` chooses BF16 if the device reports support, otherwise FP16 with gradient scaling; FP32 can be selected. Non-finite loss/gradients stop the run. The batch-1 smoke performs one disposable forward/backward/optimizer step and records actual peak allocated/reserved VRAM before training. The script requires a matching smoke report for each dataset/model/mode. On 12 GB RTX 3060 cards, proceed only if measured headroom is adequate; batch-size assumptions are not a substitute for measurement. The code saves epoch-level `last.pt` and validation-selected `best.pt` plus SHA-256 sidecars outside Git, with optimizer, scaler, RNG and history for explicit trusted resume.
+The retained secondary partial mode unfreezes ViT-S **blocks 10–11 plus final norm**, or ConvNeXt-T **the last two residual blocks of stage 3 plus final layer norm**. All earlier backbone parameters remain frozen and the backbone stays in eval behavior while gradients flow through the selected blocks. Frozen linear probing and its persistent cache also remain available. Neither secondary path is required before full tuning. `peft` is an explicit unimplemented extension point: LoRA/adapters need a separate reviewed protocol.
+
+**Primary full-tuning budget:** seed 42, **20 epochs**, effective batch **32**, AdamW, weight decay .01, head LR 1e-3, backbone LR 1e-5, gradient clip 1.0, no early stopping or enhancement augmentation. Prespecified micro-batches are **1, 4, 8, 16, 32**, paired with accumulation **32, 8, 4, 2, 1** respectively; the code rejects other full-mode pairs. Each incomplete last window is divided by its actual number of images, so every image has equal gradient weight. Each epoch records all optimizer window image counts, including the final window. The same seed, loss, manifest, evaluation and selection rule apply across batch-size trials, but changed micro-batch can still affect numerical order and training behavior; select one feasible size from resource benchmarking before the run and report it.
+
+CUDA BF16 is supported only if PyTorch reports it on the selected GPU. FP16 uses gradient scaling; FP32 remains available. The two-step disposable smoke at each batch size measures peak allocated/reserved VRAM **after optimizer state exists**, free/total device memory, and model-step throughput excluding image decoding and processor time; it saves no modified weights. Training requires a matching smoke report for the chosen micro-batch. On shared 12 GB RTX 3060 GPUs, inspect free memory before and during training; a successful benchmark does not guarantee immunity to later contention. Non-finite loss or gradients stop the run. The full-mode checkpoint stores **all** fine-tuned backbone and head parameters, optimizer, scaler, RNG and history in epoch-level `last.pt` and validation-selected `best.pt`, with SHA-256 sidecars outside Git. Explicit trusted resume restores that state. Frozen and partial modes retain the same 20-epoch defaults but are secondary protocols.
 
 **Checkpoint selection:** maximize five-grade **validation macro-F1**, tie-break by lower validation cross entropy, then earliest epoch. No checkpoint is chosen from final test or E3 sensitivity. Report per epoch: train/validation loss, accuracy, macro-F1, weighted-F1, QWK, grade MAE, per-grade recall/support, true-row confusion matrix, wall time, images/s, and peak GPU allocated/reserved bytes. Total/trainable parameter counts are recorded at smoke and in the completed run summary. The final summary points to the selected epoch and says `NOT_ACCESSED` for final test. This reuses historical validation data for tuning and is **not independent confirmation**.
 
@@ -71,28 +75,59 @@ CONV_SHA=$(sha256sum "$CONV_DIR/pytorch_model.bin" | awk '{print $1}')
 printf '%s %s %s\n' "$VIT_REV" "$VIT_DIR" "$VIT_SHA" "$CONV_REV" "$CONV_DIR" "$CONV_SHA" > "$ROOT/foundation_download_receipts.txt"
 ```
 
-For each primary model, set the variables below (the second block is the ConvNeXt alternative). Run the same command block separately for `APTOS2019` and `DDR`; output directories are independent. `preflight` hashes every train/validation image and checks group separation without loading a model. For ConvNeXt only, `LOAD_FLAG` explicitly permits the audited legacy `.bin` after hash verification.
+For each primary model, set the variables below (the second line is the ConvNeXt alternative), then repeat for `APTOS2019` and `DDR`. `preflight` hashes every train/validation image without loading a model. The example uses BF16; if the selected GPU fails the BF16 smoke, record that outcome and use a separately named FP16 or FP32 protocol rather than silently changing precision. For ConvNeXt, `LOAD_FLAG` explicitly permits the verified legacy `.bin` weight.
 
 ```bash
 MODEL_KIND=dinov3_vits16; MODEL_DIR="$VIT_DIR"; REV="$VIT_REV"; WEIGHT_SHA="$VIT_SHA"; LOAD_FLAG=""
-# Alternative: MODEL_KIND=convnext_tiny; MODEL_DIR="$CONV_DIR"; REV="$CONV_REV"; WEIGHT_SHA="$CONV_SHA"; LOAD_FLAG="--trust-legacy-bin"
+# ConvNeXt alternative:
+# MODEL_KIND=convnext_tiny; MODEL_DIR="$CONV_DIR"; REV="$CONV_REV"; WEIGHT_SHA="$CONV_SHA"; LOAD_FLAG="--trust-legacy-bin"
 DATASET=APTOS2019
-# Alternative for the second dataset: DATASET=DDR
+# Repeat the complete procedure with DATASET=DDR.
 BASE="$ROOT/foundation_e4/$DATASET/$MODEL_KIND"
 "$PY" -m novelty.foundation_adaptation preflight --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA"
-CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode frozen --device cuda:0 --precision auto --output-dir "$BASE/smoke_frozen"
-CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode partial --device cuda:0 --precision auto --output-dir "$BASE/smoke_partial"
 ```
 
-Inspect both smoke JSON files and shared GPU free memory before starting. Frozen vector extraction is separate from training; if interrupted, repeat its exact command with `--resume`.
+Run the batch-1 smoke first, then benchmark the remaining prespecified sizes. Each size starts from the **original official snapshot** in a fresh process, takes two disposable forward/backward/AdamW steps, and writes a separate JSON. An out-of-memory size can fail without altering earlier reports; investigate failures before selecting a feasible micro-batch. No benchmark weights are saved.
 
 ```bash
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --batch-size 1 --device cuda:0 --precision bf16 --seed 42 --output-dir "$BASE/full_smoke_b1"
+for BS in 4 8 16 32; do
+  CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --batch-size "$BS" --device cuda:0 --precision bf16 --seed 42 --output-dir "$BASE/full_smoke_b$BS" || echo "Batch $BS did not pass; inspect the error and GPU state"
+done
+```
+
+In a **separate KC terminal**, monitor the shared GPU during smoke and training:
+
+```bash
+nvidia-smi --query-gpu=index,name,memory.used,memory.free,utilization.gpu --format=csv -l 2
+```
+
+Choose a passing micro-batch after reviewing peak reserved bytes and available shared memory. The following full-mode command uses `MICRO=4` only as a **command example**; set it to a measured passing size before the run. The accumulation factor keeps the nominal batch at 32. The final short window is recorded separately and is not padded or dropped. Full fine-tuning never reads `frozen_vectors`.
+
+```bash
+MICRO=4
+ACCUM=$((32 / MICRO))
+test -f "$BASE/full_smoke_b$MICRO/smoke.json" || { echo 'Matching smoke report required'; exit 1; }
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --device cuda:0 --precision bf16 --seed 42 --smoke-report "$BASE/full_smoke_b$MICRO/smoke.json" --output-dir "$BASE/full_seed42_b$MICRO" --epochs 20 --micro-batch "$MICRO" --accumulation "$ACCUM" --head-lr 0.001 --backbone-lr 0.00001
+```
+
+For an interrupted run, repeat that **exact training command**, adding `--resume --trust-run-checkpoint`. Keep `MICRO`, `ACCUM`, the pinned snapshot, precision, learning rates, and all other flags unchanged. The resume guard checks run metadata and checkpoint hashes. Example:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode full --device cuda:0 --precision bf16 --seed 42 --smoke-report "$BASE/full_smoke_b$MICRO/smoke.json" --output-dir "$BASE/full_seed42_b$MICRO" --epochs 20 --micro-batch "$MICRO" --accumulation "$ACCUM" --head-lr 0.001 --backbone-lr 0.00001 --resume --trust-run-checkpoint
+```
+
+The retained **secondary** modes can still be run under their own output directories. Frozen probing first extracts verified embeddings; partial tuning uses images directly and rejects that feature cache. They are not prerequisites for full tuning.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode frozen --batch-size 1 --device cuda:0 --precision auto --output-dir "$BASE/smoke_frozen"
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation smoke --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode partial --batch-size 1 --device cuda:0 --precision auto --output-dir "$BASE/smoke_partial"
 CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation extract --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --device cuda:0 --feature-cache-dir "$BASE/frozen_vectors"
 CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode frozen --device cuda:0 --precision auto --feature-cache-dir "$BASE/frozen_vectors" --smoke-report "$BASE/smoke_frozen/smoke.json" --output-dir "$BASE/probe_seed42" --epochs 20 --micro-batch 1 --accumulation 32 --head-lr 0.001 --backbone-lr 0.00001
 CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation train --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --mode partial --device cuda:0 --precision auto --smoke-report "$BASE/smoke_partial/smoke.json" --output-dir "$BASE/partial_seed42" --epochs 20 --micro-batch 1 --accumulation 32 --head-lr 0.001 --backbone-lr 0.00001
 ```
 
-An interrupted train command resumes by rerunning the **identical** line with `--resume --trust-run-checkpoint`. `best.pt` and `last.pt` are project-created pickle files outside Git; the explicit flag is restricted to the hash-checked run directory. Do not point it at an unrelated checkpoint. The operator may later run `sensitivity` on the exact E3 pilot after confirming the isolated environment's NumPy/OpenCV/Pillow versions match the Phase 1 cache. OpenCV is needed only for E5, not for the initial adaptation baseline. Inspect a cache metadata file and install the recorded OpenCV version in the isolated environment; if the NumPy or Pillow versions differ, use a compatible environment matching all three rather than altering the existing cache. This is not part of the initial baseline:
+`best.pt` and `last.pt` are project-created pickle files outside Git; the explicit resume flag is restricted to the hash-checked run directory. Do not point it at an unrelated checkpoint. The operator may later run `sensitivity` on the exact E3 pilot after confirming the isolated environment's NumPy/OpenCV/Pillow versions match the Phase 1 cache. OpenCV is needed only for E5, not for the initial adaptation baseline. Inspect a cache metadata file and install the recorded OpenCV version in the isolated environment; if the NumPy or Pillow versions differ, use a compatible environment matching all three rather than altering the existing cache. This is not part of the initial baseline:
 
 ```bash
 CACHE_META=$(find "$ROOT/preof_phase1/preprocessing/v1" -type f -name '*.json' -print -quit)
@@ -106,7 +141,7 @@ CV_VER=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["payload"
 ```bash
 E3_PILOT="$ROOT/preof_e3/aptos_pilot"
 # For DATASET=DDR, set E3_PILOT="$ROOT/preof_e3/ddr_pilot" instead.
-CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation sensitivity --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --device cuda:0 --run-dir "$BASE/probe_seed42" --e3-pilot-dir "$E3_PILOT" --preprocess-cache-root "$ROOT/preof_phase1/preprocessing" --output-dir "$BASE/probe_e3_sensitivity" --trust-run-checkpoint
+CUDA_VISIBLE_DEVICES=0 "$PY" -m novelty.foundation_adaptation sensitivity --dataset "$DATASET" --artifact-root "$ROOT" --model-kind "$MODEL_KIND" --model-dir "$MODEL_DIR" --revision "$REV" --weight-sha256 "$WEIGHT_SHA" $LOAD_FLAG --device cuda:0 --run-dir "$BASE/full_seed42_b$MICRO" --e3-pilot-dir "$E3_PILOT" --preprocess-cache-root "$ROOT/preof_phase1/preprocessing" --output-dir "$BASE/full_seed42_b${MICRO}_e3_sensitivity" --trust-run-checkpoint
 ```
 
 The optional DINOv3 ConvNeXt comparator requires separate authorized revision/processor verification and has **frozen-probe support only**. Do not launch its partial mode until the final-block layout and fair budget are reviewed. No real model performance, VRAM value, or E5 sensitivity result is claimed in this document.

@@ -82,6 +82,8 @@ class FoundationAdaptationTests(unittest.TestCase):
         self.assertEqual(selected, ["layer.10", "layer.11", "norm"])
         self.assertFalse(any(p.requires_grad for p in backbone.layer[9].parameters()))
         self.assertTrue(all(p.requires_grad for p in backbone.layer[10].parameters()))
+        self.assertEqual(fa.configure_trainable(backbone, "dinov3_vits16", "full"), ["entire_backbone"])
+        self.assertTrue(all(p.requires_grad for p in backbone.parameters()))
         with self.assertRaises(NotImplementedError):
             fa.configure_trainable(backbone, "dinov3_vits16", "peft")
 
@@ -102,6 +104,8 @@ class FoundationAdaptationTests(unittest.TestCase):
                          ["encoder.stages.3.layers.1", "encoder.stages.3.layers.2", "layernorm"])
         self.assertFalse(any(p.requires_grad for p in convnext.encoder.stages[3].layers[0].parameters()))
         self.assertTrue(all(p.requires_grad for p in convnext.encoder.stages[3].layers[2].parameters()))
+        self.assertEqual(fa.configure_trainable(convnext, "convnext_tiny", "full"), ["entire_backbone"])
+        self.assertTrue(all(p.requires_grad for p in convnext.parameters()))
 
     def test_feature_index_detects_corruption_and_selection_rule(self):
         rows = [{"image_id": f"i{i}", "split": "train", "label": i,
@@ -156,7 +160,8 @@ class FoundationAdaptationTests(unittest.TestCase):
             smoke_path.write_text(json.dumps({"schema": fa.SCHEMA, "dataset": "APTOS2019",
                 "model_kind": "dinov3_vits16", "mode": "frozen", "snapshot_weight_sha256": "e" * 64,
                 "snapshot_revision": "b" * 40, "processor_config_sha256": "d" * 64,
-                "manifest_sha256": "a" * 64, "device_type": "cpu", "batch_size": 1,
+                "manifest_sha256": "a" * 64, "device_type": "cpu", "batch_size": 2,
+                "status": "BATCH_SMOKE_PASS", "optimizer_steps": 2, "weights_saved": False,
                 "precision": "fp32", "implementation_sha256": phase.sha256(fa.__file__)}), encoding="utf-8")
             args = SimpleNamespace(mode="frozen", epochs=2, micro_batch=2, accumulation=3,
                 seed=42, head_lr=1e-3, backbone_lr=1e-5, weight_decay=.01,
@@ -188,8 +193,10 @@ class FoundationAdaptationTests(unittest.TestCase):
                 self.layer = torch.nn.ModuleList([torch.nn.Linear(1, 1) for _ in range(12)])
                 self.norm = torch.nn.LayerNorm(384)
                 self.config = SimpleNamespace(hidden_size=384, model_type="dinov3_vit")
+                self.training_modes = []
 
             def forward(self, pixel_values):
+                self.training_modes.append(self.training)
                 value = pixel_values.mean(dim=(1, 2, 3))[:, None]
                 for layer in self.layer:
                     value = layer(value)
@@ -211,6 +218,7 @@ class FoundationAdaptationTests(unittest.TestCase):
                 "model_kind": "dinov3_vits16", "mode": "partial", "snapshot_weight_sha256": "e" * 64,
                 "snapshot_revision": "b" * 40, "processor_config_sha256": "d" * 64,
                 "manifest_sha256": "a" * 64, "device_type": "cpu", "batch_size": 1,
+                "status": "BATCH_SMOKE_PASS", "optimizer_steps": 2, "weights_saved": False,
                 "precision": "fp32", "implementation_sha256": phase.sha256(fa.__file__)}), encoding="utf-8")
             args = SimpleNamespace(mode="partial", epochs=1, micro_batch=1, accumulation=2,
                 seed=42, head_lr=1e-3, backbone_lr=1e-5, weight_decay=.01,
@@ -234,6 +242,114 @@ class FoundationAdaptationTests(unittest.TestCase):
             result = json.loads((root / "run" / "summary.json").read_text())
             self.assertGreater(result["parameter_counts"]["backbone_trainable"], 0)
             self.assertEqual(result["epochs_completed"], 1)
+            self.assertNotIn(True, backbone.training_modes)
+
+            full_backbone = TinyBackbone()
+            args.mode, args.accumulation = "full", 32
+            args.output_dir = str(root / "full_run")
+            smoke = json.loads(smoke_path.read_text(encoding="utf-8"))
+            smoke["mode"] = "full"
+            smoke_path.write_text(json.dumps(smoke), encoding="utf-8")
+            with (patch.object(fa, "load_train_val_manifest", return_value=(rows, manifest)),
+                  patch.object(fa, "audit_snapshot", return_value=snapshot),
+                  patch.object(fa, "load_local_backbone", return_value=(full_backbone, object())),
+                  patch.object(fa, "_image_batch", side_effect=fake_batch),
+                  patch.object(fa, "_feature_cache", side_effect=AssertionError("Never use frozen cache"))):
+                fa.train(args)
+                args.resume, args.trust_run_checkpoint = True, True
+                fa.train(args)
+            summary = json.loads((root / "full_run" / "summary.json").read_text())
+            history = json.loads((root / "full_run" / "history.json").read_text())
+            self.assertEqual(summary["parameter_counts"]["backbone_trainable"],
+                             summary["parameter_counts"]["backbone_total"])
+            self.assertEqual(history[0]["train"]["accumulation_window_images"], [5])
+            self.assertIn(True, full_backbone.training_modes)
+            self.assertIn(False, full_backbone.training_modes)
+            self.assertEqual(summary["final_test_status"], "NOT_ACCESSED")
+
+    def test_accumulation_matches_image_weighted_large_batches(self):
+        for n, micro, accumulation, expected in ((7, 2, 2, [4, 3]), (5, 1, 4, [4, 1])):
+            with self.subTest(n=n, micro=micro):
+                torch.manual_seed(17)
+                features = torch.randn(n, 384)
+                labels = torch.arange(n) % 5
+                actual = torch.nn.Linear(384, 5)
+                reference = torch.nn.Linear(384, 5)
+                reference.load_state_dict(actual.state_dict())
+                optimizer = torch.optim.SGD(actual.parameters(), lr=.1)
+                ref_optimizer = torch.optim.SGD(reference.parameters(), lr=.1)
+                batches = [(features[i:i + micro], labels[i:i + micro])
+                           for i in range(0, n, micro)]
+                info = fa._train_epoch(None, actual, "frozen", "dinov3_vits16",
+                    batches, optimizer, None, torch.device("cpu"), "fp32",
+                    accumulation, 1e9, len(batches), n, micro)
+                offset = 0
+                for window in expected:
+                    ref_optimizer.zero_grad(set_to_none=True)
+                    loss = torch.nn.functional.cross_entropy(
+                        reference(features[offset:offset + window]), labels[offset:offset + window])
+                    loss.backward()
+                    ref_optimizer.step()
+                    offset += window
+                self.assertEqual(info["accumulation_window_images"], expected)
+                self.assertEqual(info["optimizer_steps"], len(expected))
+                for value, wanted in zip(actual.parameters(), reference.parameters()):
+                    torch.testing.assert_close(value, wanted, atol=1e-6, rtol=1e-6)
+
+    def test_full_smoke_benchmarks_all_prespecified_micro_batches(self):
+        class MiniConv(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Parameter(torch.ones(768))
+                self.config = SimpleNamespace(model_type="convnext")
+
+            def forward(self, pixel_values):
+                values = pixel_values.mean(dim=(1, 2, 3))[:, None] * self.weight[None]
+                feature_map = values[:, :, None, None].expand(-1, -1, 7, 7)
+                return SimpleNamespace(pooler_output=values, last_hidden_state=feature_map)
+
+        class Processor:
+            def to_dict(self):
+                return {"size": 224}
+
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            rows = {"train": [{"label": i % 5} for i in range(32)], "val": []}
+            snapshot = {"weight_sha256": "a" * 64, "revision": "b" * 40,
+                        "processor_config_sha256": "c" * 64}
+            for batch_size in (1, 4, 8, 16, 32):
+                with self.subTest(batch_size=batch_size):
+                    args = SimpleNamespace(mode="full", batch_size=batch_size,
+                        artifact_root=str(root), dataset="DDR", model_kind="convnext_tiny",
+                        model_dir=str(root / "snapshot"), revision="b" * 40,
+                        weight_sha256="a" * 64, output_dir=str(root / f"smoke{batch_size}"),
+                        seed=42, device="cpu", precision="fp32", trust_legacy_bin=True)
+                    def fake_batch(selected, _processor):
+                        pixels = torch.ones(len(selected), 3, 224, 224)
+                        return pixels, torch.tensor([row["label"] for row in selected])
+                    with (patch.object(fa, "load_train_val_manifest",
+                                       return_value=(rows, {"manifest_sha256": "d" * 64})),
+                          patch.object(fa, "audit_snapshot", return_value=snapshot),
+                          patch.object(fa, "load_local_backbone",
+                                       return_value=(MiniConv(), Processor())),
+                          patch.object(fa, "_image_batch", side_effect=fake_batch)):
+                        fa.smoke(args)
+                    result = json.loads((root / f"smoke{batch_size}" / "smoke.json").read_text())
+                    self.assertEqual(result["batch_size"], batch_size)
+                    self.assertEqual(result["optimizer_steps"], 2)
+                    self.assertEqual(result["parameter_counts"]["backbone_trainable"],
+                                     result["parameter_counts"]["backbone_total"])
+                    self.assertFalse(result["weights_saved"])
+
+    def test_full_mode_rejects_wrong_effective_batch_and_frozen_cache(self):
+        args = SimpleNamespace(mode="full", epochs=20, micro_batch=4, accumulation=4,
+            seed=42, head_lr=1e-3, backbone_lr=1e-5, weight_decay=.01,
+            max_grad_norm=1., feature_cache_dir=None)
+        with self.assertRaisesRegex(ValueError, "effective batch 32"):
+            fa.train(args)
+        args.accumulation, args.feature_cache_dir = 8, "forbidden"
+        with self.assertRaisesRegex(ValueError, "frozen embeddings"):
+            fa.train(args)
 
     def test_e3_sensitivity_uses_exact_validation_pilot_only(self):
         with TemporaryDirectory() as temp:

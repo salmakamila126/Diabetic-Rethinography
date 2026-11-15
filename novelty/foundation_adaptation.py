@@ -217,11 +217,19 @@ def pooled(backbone, pixels, model_kind):
 
 
 def configure_trainable(backbone, model_kind, mode):
-    """Prespecified full final blocks; PEFT is a future separate implementation."""
+    """Select full, partial, or frozen backbone parameters; PEFT remains separate."""
     if mode == "peft":
         raise NotImplementedError("PEFT requires a separate reviewed adapter protocol")
-    if mode not in {"frozen", "partial"}:
-        raise ValueError("Mode must be frozen or partial")
+    if mode not in {"frozen", "partial", "full"}:
+        raise ValueError("Mode must be frozen, partial, or full")
+    if mode == "full":
+        if model_kind not in {"dinov3_vits16", "convnext_tiny"}:
+            raise ValueError("Full tuning is audited only for the two primary backbones")
+        for parameter in backbone.parameters():
+            parameter.requires_grad_(True)
+        if not any(parameter.requires_grad for parameter in backbone.parameters()):
+            raise ValueError("Full tuning selected no backbone parameters")
+        return ["entire_backbone"]
     for parameter in backbone.parameters():
         parameter.requires_grad_(False)
     if mode == "frozen":
@@ -512,29 +520,33 @@ def _eval_epoch(backbone, head, mode, model_kind, batches, device, precision):
 
 
 def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
-                 device, precision, accumulation, max_grad_norm, total_batches):
+                 device, precision, accumulation, max_grad_norm, total_batches,
+                 total_images, micro_batch):
+    """Each image contributes equally, including incomplete accumulation windows."""
     import torch
     import torch.nn.functional as F
 
     head.train()
-    # Frozen earlier blocks and their deterministic behavior remain in eval mode.
     if backbone is not None:
-        backbone.eval()
-    total_loss, count, steps = 0.0, 0, 0
+        backbone.train() if mode == "full" else backbone.eval()
+    if total_images < 1 or total_batches != math.ceil(total_images / micro_batch):
+        raise ValueError("Accumulation batch/image budget differs")
+    total_loss, count, steps, window_images = 0.0, 0, 0, []
     optimizer.zero_grad(set_to_none=True)
     for index, (inputs, labels) in enumerate(batches):
         inputs, labels = inputs.to(device), labels.to(device)
-        window = min(accumulation, total_batches - (index // accumulation) * accumulation)
+        window_start = (index // accumulation) * accumulation * micro_batch
+        window_size = min(accumulation * micro_batch, total_images - window_start)
+        expected_batch = min(micro_batch, total_images - index * micro_batch)
+        if len(labels) != expected_batch or window_size < len(labels):
+            raise ValueError("Invalid accumulation window/image count")
         with _autocast(device, precision):
-            if mode == "frozen":
-                embedding = inputs
-            else:
-                embedding = pooled(backbone, inputs, model_kind)
+            embedding = inputs if mode == "frozen" else pooled(backbone, inputs, model_kind)
             logits = head(embedding.float())
             loss = F.cross_entropy(logits.float(), labels)
         if not torch.isfinite(loss):
             raise ValueError("Non-finite training loss")
-        scaled_loss = loss / window
+        scaled_loss = loss * (len(labels) / window_size)
         if scaler is not None:
             scaler.scale(scaled_loss).backward()
         else:
@@ -555,9 +567,12 @@ def _train_epoch(backbone, head, mode, model_kind, batches, optimizer, scaler,
                 optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             steps += 1
-    if count == 0 or index + 1 != total_batches:
-        raise ValueError("Train iterator batch count differs")
-    return {"loss": total_loss / count, "images": count, "optimizer_steps": steps}
+            window_images.append(window_size)
+    if count != total_images or index + 1 != total_batches or sum(window_images) != total_images:
+        raise ValueError("Train iterator image/batch count differs")
+    return {"loss": total_loss / count, "images": count, "optimizer_steps": steps,
+            "accumulation_window_images": window_images,
+            "last_window_images": window_images[-1]}
 
 
 def _run_metadata(args, manifest_info, snapshot, precision, feature_meta=None):
@@ -649,12 +664,15 @@ def _best_is_new(metrics, prior):
 def train(args):
     import torch
 
-    if (args.mode not in {"frozen", "partial"} or args.epochs < 1 or args.micro_batch < 1
+    if (args.mode not in {"frozen", "partial", "full"} or args.epochs < 1 or args.micro_batch < 1
             or args.accumulation < 1 or args.seed < 0 or args.head_lr <= 0
             or args.backbone_lr <= 0 or args.weight_decay < 0 or args.max_grad_norm <= 0):
         raise ValueError("Invalid prespecified training settings")
-    if args.mode == "partial" and args.feature_cache_dir:
-        raise ValueError("Partial fine-tuning must never consume frozen embeddings")
+    if args.mode in {"partial", "full"} and args.feature_cache_dir:
+        raise ValueError("Backbone fine-tuning must never consume frozen embeddings")
+    if args.mode == "full" and (args.micro_batch not in {1, 4, 8, 16, 32}
+                                or args.accumulation != 32 // args.micro_batch):
+        raise ValueError("Full tuning requires micro-batch 1/4/8/16/32 and effective batch 32")
     if args.mode == "frozen" and not args.feature_cache_dir:
         raise ValueError("Frozen linear probe requires the persistent feature cache")
     rows_by_split, manifest_info = load_train_val_manifest(args.artifact_root, args.dataset)
@@ -676,8 +694,8 @@ def train(args):
         vectors, feature_meta = _feature_cache(args, rows, manifest_info, snapshot)
     else:
         backbone, processor = load_local_backbone(snapshot, trust_legacy_bin=args.trust_legacy_bin)
-        selected = configure_trainable(backbone, args.model_kind, "partial")
-        backbone.to(device).eval()
+        configure_trainable(backbone, args.model_kind, args.mode)
+        backbone.to(device)
     head = torch.nn.Linear(MODELS[args.model_kind]["dimension"], 5).to(device)
     groups = [{"params": list(head.parameters()), "lr": args.head_lr}]
     if backbone is not None:
@@ -687,16 +705,18 @@ def train(args):
     scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16") if precision == "fp16" else None
     record = _run_metadata(args, manifest_info, snapshot, precision, feature_meta)
     smoke = json.loads(Path(args.smoke_report).read_text(encoding="utf-8"))
-    if (smoke.get("schema") != SCHEMA or smoke.get("dataset") != args.dataset
+    if (smoke.get("schema") != SCHEMA or smoke.get("status") != "BATCH_SMOKE_PASS"
+            or smoke.get("optimizer_steps") != 2 or smoke.get("weights_saved") is not False
+            or smoke.get("dataset") != args.dataset
             or smoke.get("model_kind") != args.model_kind or smoke.get("mode") != args.mode
             or smoke.get("snapshot_weight_sha256") != snapshot["weight_sha256"]
             or smoke.get("snapshot_revision") != snapshot["revision"]
             or smoke.get("processor_config_sha256") != snapshot["processor_config_sha256"]
             or smoke.get("manifest_sha256") != manifest_info["manifest_sha256"]
-            or smoke.get("device_type") != device.type or smoke.get("batch_size") != 1
+            or smoke.get("device_type") != device.type or smoke.get("batch_size") != args.micro_batch
             or smoke.get("precision") != precision
             or smoke.get("implementation_sha256") != phase.sha256(__file__)):
-        raise ValueError("Batch-1 smoke report is absent or differs from this run")
+        raise ValueError("Matching two-step smoke report is absent or differs from this run")
     if output.exists():
         if json.loads((output / "run.json").read_text(encoding="utf-8")) != record:
             raise ValueError("Run protocol/provenance differs; refuse resume")
@@ -737,7 +757,8 @@ def train(args):
                                   _epochs_batches(args.mode, rows_by_split, processor, vectors,
                                                   args.micro_batch, args.seed, epoch),
                                   optimizer, scaler, device, precision, args.accumulation,
-                                  args.max_grad_norm, n_batches)
+                                  args.max_grad_norm, n_batches, len(rows_by_split["train"]),
+                                  args.micro_batch)
         train_seconds = time.perf_counter() - start
         start = time.perf_counter()
         validation = _eval_epoch(backbone, head, args.mode, args.model_kind,
@@ -750,7 +771,11 @@ def train(args):
                                                  if device.type == "cuda" else None),
                     "gpu_peak_reserved_bytes": (torch.cuda.max_memory_reserved(device)
                                                 if device.type == "cuda" else None),
-                    "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" else None}
+                    "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
+                    "gpu_free_bytes_after_epoch": (torch.cuda.mem_get_info(device)[0]
+                                                   if device.type == "cuda" else None),
+                    "gpu_total_bytes": (torch.cuda.mem_get_info(device)[1]
+                                        if device.type == "cuda" else None)}
         current = {"epoch": epoch, "train": train_info, "validation": validation,
                    "resource": resource}
         history.append(current)
@@ -780,12 +805,22 @@ def train(args):
 
 
 def smoke(args):
+    """Measure two disposable training steps at the chosen micro-batch size.
+
+    Step two includes AdamW state in the forward/backward memory peak.
+    No updated weights are saved.
+    """
     import torch
     import torch.nn.functional as F
 
-    if args.mode not in {"frozen", "partial"}:
-        raise ValueError("Smoke mode must be frozen or partial")
+    if args.mode not in {"frozen", "partial", "full"}:
+        raise ValueError("Smoke mode must be frozen, partial, or full")
+    batch_size = getattr(args, "batch_size", 1)
+    if batch_size not in {1, 4, 8, 16, 32}:
+        raise ValueError("Smoke batch size must be 1, 4, 8, 16, or 32")
     rows_by_split, manifest_info = load_train_val_manifest(args.artifact_root, args.dataset)
+    if len(rows_by_split["train"]) < batch_size:
+        raise ValueError("Training manifest has fewer images than smoke batch")
     snapshot = audit_snapshot(args.model_kind, args.model_dir, args.revision, args.weight_sha256)
     output = _safe_out(args.output_dir, [Path(args.artifact_root) / "datasets", args.model_dir])
     if output.exists():
@@ -797,41 +832,48 @@ def smoke(args):
     precision = _precision(device, args.precision)
     backbone, processor = load_local_backbone(snapshot, trust_legacy_bin=args.trust_legacy_bin)
     selected = configure_trainable(backbone, args.model_kind, args.mode)
-    backbone.to(device).eval()
+    backbone.to(device)
+    backbone.train() if args.mode == "full" else backbone.eval()
     head = torch.nn.Linear(MODELS[args.model_kind]["dimension"], 5).to(device)
     parameters = list(head.parameters()) + [p for p in backbone.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(parameters, lr=1e-4)
     scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16") if precision == "fp16" else None
-    if device.type == "cuda":
-        torch.cuda.reset_peak_memory_stats(device)
-    started = time.perf_counter()
-    pixels, labels = _image_batch([rows_by_split["train"][0]], processor)
+    pixels, labels = _image_batch(rows_by_split["train"][:batch_size], processor)
     pixels, labels = pixels.to(device), labels.to(device)
-    with _autocast(device, precision):
-        if args.mode == "frozen":
-            with torch.no_grad():
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+        free_before, total_bytes = torch.cuda.mem_get_info(device)
+        torch.cuda.reset_peak_memory_stats(device)
+    else:
+        free_before = total_bytes = None
+    started = time.perf_counter()
+    for _ in range(2):
+        optimizer.zero_grad(set_to_none=True)
+        with _autocast(device, precision):
+            if args.mode == "frozen":
+                with torch.no_grad():
+                    embedding = pooled(backbone, pixels, args.model_kind)
+            else:
                 embedding = pooled(backbone, pixels, args.model_kind)
+            loss = F.cross_entropy(head(embedding.float()).float(), labels)
+        if not torch.isfinite(loss):
+            raise ValueError("Non-finite smoke loss")
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
         else:
-            embedding = pooled(backbone, pixels, args.model_kind)
-        loss = F.cross_entropy(head(embedding.float()).float(), labels)
-    if not torch.isfinite(loss):
-        raise ValueError("Non-finite smoke loss")
-    if scaler is not None:
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-    else:
-        loss.backward()
-    if any(p.grad is not None and not bool(torch.isfinite(p.grad).all()) for p in parameters):
-        raise ValueError("Non-finite smoke gradient")
-    if scaler is not None:
-        scaler.step(optimizer)
-        scaler.update()
-    else:
-        optimizer.step()  # disposable in-memory step to include optimizer state in peak VRAM
+            loss.backward()
+        if any(p.grad is not None and not bool(torch.isfinite(p.grad).all()) for p in parameters):
+            raise ValueError("Non-finite smoke gradient")
+        if scaler is not None:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     elapsed = time.perf_counter() - started
-    report = {"schema": SCHEMA, "status": "BATCH1_SMOKE_PASS", "dataset": args.dataset,
+    report = {"schema": SCHEMA, "status": "BATCH_SMOKE_PASS", "dataset": args.dataset,
               "model_kind": args.model_kind, "mode": args.mode,
               "snapshot_weight_sha256": snapshot["weight_sha256"],
               "snapshot_revision": snapshot["revision"],
@@ -841,16 +883,21 @@ def smoke(args):
               "input_shape": list(pixels.shape), "embedding_shape": list(embedding.shape),
               "selected_backbone_modules": selected,
               "parameter_counts": _parameter_counts(backbone, head),
-              "precision": precision, "batch_size": 1, "device_type": device.type,
+              "precision": precision, "batch_size": batch_size, "device_type": device.type,
               "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
               "peak_allocated_bytes": torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None,
               "peak_reserved_bytes": torch.cuda.max_memory_reserved(device) if device.type == "cuda" else None,
-              "elapsed_seconds": elapsed, "optimizer_step": True,
+              "gpu_free_bytes_before": free_before,
+              "gpu_free_bytes_after": torch.cuda.mem_get_info(device)[0] if device.type == "cuda" else None,
+              "gpu_total_bytes": total_bytes,
+              "elapsed_seconds": elapsed, "images_per_second": 2 * batch_size / elapsed,
+              "optimizer_steps": 2, "weights_saved": False,
               "implementation_sha256": phase.sha256(__file__)}
     output.mkdir(parents=True)
     _atomic_json(output / "smoke.json", report)
-    print(json.dumps({key: report[key] for key in ("status", "model_kind", "mode", "peak_allocated_bytes",
-                                                   "peak_reserved_bytes", "elapsed_seconds")}, indent=2))
+    print(json.dumps({key: report[key] for key in ("status", "model_kind", "mode", "batch_size",
+                                                   "peak_allocated_bytes", "peak_reserved_bytes",
+                                                   "elapsed_seconds")}, indent=2))
 
 
 def preflight(args):
@@ -918,7 +965,7 @@ def sensitivity(args):
     backbone, processor = load_local_backbone(snapshot, trust_legacy_bin=args.trust_legacy_bin)
     head = torch.nn.Linear(MODELS[args.model_kind]["dimension"], 5)
     head.load_state_dict(checkpoint["head"], strict=True)
-    if run_record["mode"] == "partial":
+    if run_record["mode"] in {"partial", "full"}:
         backbone.load_state_dict(checkpoint["backbone"], strict=True)
     elif run_record["mode"] != "frozen" or checkpoint["backbone"] is not None:
         raise ValueError("Unknown or inconsistent trained mode")
@@ -996,14 +1043,15 @@ def main(argv=None):
             sub.add_argument("--seed", type=int, default=42)
             sub.add_argument("--trust-legacy-bin", action="store_true")
         if name == "smoke":
-            sub.add_argument("--mode", choices=("frozen", "partial"), required=True)
+            sub.add_argument("--mode", choices=("full", "frozen", "partial"), required=True)
+            sub.add_argument("--batch-size", type=int, default=1)
             sub.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto")
             sub.add_argument("--output-dir", required=True)
         elif name == "extract":
             sub.add_argument("--feature-cache-dir", required=True)
             sub.add_argument("--resume", action="store_true")
         elif name == "train":
-            sub.add_argument("--mode", choices=("frozen", "partial"), required=True)
+            sub.add_argument("--mode", choices=("full", "frozen", "partial"), required=True)
             sub.add_argument("--feature-cache-dir")
             sub.add_argument("--smoke-report", required=True)
             sub.add_argument("--output-dir", required=True)
