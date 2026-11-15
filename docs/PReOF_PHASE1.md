@@ -1,6 +1,6 @@
 # PReOF Phase 1 — cache preprocessing, cache prediksi, dan uji kelayakan E0
 
-**Status: PROPOSAL / belum ada hasil E0.** PReOF menanyakan apakah respons prediksi model terhadap perpindahan preprocessing V1↔V2 memberi informasi tambahan tentang *kesalahan keputusan pada batas ordinal* `Y ≥ k`. Phase 1 hanya menguji pertanyaan tersebut. Belum ada gating, projection, regularized ordinal learning, pelatihan backbone baru, atau akses final test.
+**Status: E0 selesai di KC; NO-GO untuk M2–M4. E1 siap dijalankan pada cache validation, belum dieksekusi di KC.** PReOF menanyakan apakah respons prediksi model terhadap perpindahan preprocessing V1↔V2 memberi informasi tambahan tentang *kesalahan keputusan pada batas ordinal* `Y ≥ k`. Phase 1 hanya menguji pertanyaan tersebut. Belum ada gating, projection, regularized ordinal learning, pelatihan backbone baru, atau akses final test.
 
 ## 1. Sumber dan batas bukti
 
@@ -90,4 +90,42 @@ test "$(git branch --show-current)" = novelty || { echo 'Checkout KC harus pada 
 "$HOME/Kel_13/.venv/bin/python" -m novelty.preof_phase1 analyze --artifact-root "$HOME/Kel_13" --cache-dir "$HOME/Kel_13/preof_phase1/ddr_full" --output-dir "$HOME/Kel_13/preof_phase1/ddr_e0" --folds 5 --bootstrap 500
 ```
 
-Tidak ada skor E0 yang dilaporkan saat ini. **NO-GO untuk M2–M4 sekarang.** GO hanya layak dipertimbangkan setelah audit preflight, cache lengkap, dan E0 menunjukkan tambahan informasi C terhadap B yang konsisten pada batas yang memiliki support memadai, tanpa degradasi kalibrasi yang substansial; D membantu menilai apakah fitur respons terstruktur memberi manfaat dibanding informasi prediksi mentah. Ketidakpastian bootstrap dan perbedaan protokol harus tetap terlihat dalam keputusan.
+**Catatan historis sebelum eksekusi KC:** pada tahap rancangan Phase 1 belum ada skor E0. Kriteria GO saat itu mensyaratkan audit preflight dan tambahan informasi C terhadap B yang konsisten, tanpa degradasi kalibrasi substansial. Hasil KC dan keputusan terkini dicatat pada bagian berikutnya.
+
+## 6. Status E0 dan analisis kegagalan prediksi E1
+
+**Pembaruan yang dilaporkan operator KC:** preflight dan cache lengkap berhasil untuk APTOS2019 (366 gambar validation) dan DDR (1.252), lalu E0 grouped 5-fold OOF selesai. Perbedaan native expert membantu deteksi kesalahan secara deskriptif, tetapi tambahan respons lintas preprocessing tidak menunjukkan peningkatan AUPRC yang meyakinkan: seluruh 16 interval bootstrap berpasangan C−B mencakup nol dan dua kondisi boundary/expert memperburuk Brier. Karena itu keputusan saat ini **NO-GO untuk implementasi penuh M2–M4**. Nilai E0 individual dan file laporannya masih berada di KC; ringkasan ini berasal dari laporan operator, bukan audit ulang file KC secara lokal.
+
+[`preof_e1.py`](../novelty/preof_e1.py) hanya membaca cache prediksi Level 2 yang lengkap dan manifest validation beku. Tidak ada pemrosesan gambar mentah, pemuatan checkpoint, GPU, training, atau akses final test. Skema, jumlah baris, urutan gambar, hash manifest/source/cache, definisi historis V2, serta empat logit dan probabilitas setiap baris diverifikasi sebelum agregasi. Hash checkpoint dan record diperiksa terhadap metadata cache dan spesifikasi Phase 1; E1 **tidak meng-hash ulang byte checkpoint KC** dan metadata itu sendiri bukan bukti kriptografis eksekusi. Output ditulis ke direktori **baru di luar Git, dataset mentah, dan cache**; cache lama tidak diubah.
+
+E1 menghitung confusion matrix dan metrik lima kelas untuk `p11=V1(V1)`, `p12=V1(V2 BG10)`, `p21=V2(V1)`, `p22=V2(V2 BG10)`. Perbandingan **dalam satu model** adalah `p11→p12` dan `p22→p21`, masing-masing memakai checkpoint tetap. Matriks transisi memakai grade prediksi native sebagai baris dan grade prediksi cross sebagai kolom. Jumlah correct→wrong, wrong→correct, perubahan grade prediksi, per-grade akurasi dan perubahan probabilitas, over/undergrading, MAE grade, QWK, dan kesalahan berkeyakinan tinggi dilaporkan sebagai agregat. Ambang keyakinan default 0,90 bersifat deskriptif dan belum dikalibrasi. Bootstrap berpasangan mengambil ulang `group_id` validation untuk interval persentil 95% dari Δ akurasi, Δ MAE, dan keuntungan oracle native. Oracle menggunakan label benar untuk memilih expert dan **hanya batas atas**, bukan algoritme seleksi yang dapat dipakai pada pasien baru. Perbandingan native V1 vs V2 juga mencerminkan perbedaan training; kontribusi preprocessing tidak dapat diisolasi dari perbandingan antar model.
+
+Lima output per dataset: `e1_results.json`, `e1_report.md`, `confusion_matrices.svg`, `grade_transitions.svg`, dan `per_grade_accuracy_delta.svg`. Grafik SVG menyimpan angka agregat dan label sumbu tanpa dependency plotting baru. Tidak ada ID gambar, gallery, atau contoh fundus pada laporan E1. Dengan bukti E0 saat ini, E1 bersifat eksploratif dan **tidak membatalkan NO-GO M2–M4**. Group bootstrap tidak mengatasi ketidakpastian label, dukungan grade minoritas, perubahan domain, atau validasi klinis eksternal.
+
+**Perintah manual KC**, setelah source `novelty` terbaru tersedia pada checkout server. Keduanya CPU-only dan memakai cache prediksi penuh yang sudah ada:
+
+```bash
+cd "$HOME/Kel_13/Diabetic-Rethinography"
+test "$(git branch --show-current)" = novelty || { echo 'Gunakan checkout novelty'; exit 1; }
+"$HOME/Kel_13/.venv/bin/python" -m novelty.preof_e1 --dataset APTOS2019 --artifact-root "$HOME/Kel_13" --cache-dir "$HOME/Kel_13/preof_phase1/aptos_full" --output-dir "$HOME/Kel_13/preof_phase1/aptos_e1" --bootstrap 500 --seed 42 --high-confidence 0.90
+"$HOME/Kel_13/.venv/bin/python" -m novelty.preof_e1 --dataset DDR --artifact-root "$HOME/Kel_13" --cache-dir "$HOME/Kel_13/preof_phase1/ddr_full" --output-dir "$HOME/Kel_13/preof_phase1/ddr_e1" --bootstrap 500 --seed 42 --high-confidence 0.90
+```
+
+Jika direktori output telah ada, pilih nama baru; script menolak penimpaan. Tinjau JSON, Markdown, dan SVG yang dihasilkan sebelum menarik kesimpulan ilmiah. **Tidak ada hasil E1 KC yang dibuat atau diklaim dalam perubahan lokal ini.**
+
+## 7. Audit titik ekstraksi fitur — rancangan saja
+
+Source otoritatif untuk kandidat ini adalah [`model.py`](../reproduction/cadvit/model.py), yang dibandingkan lewat AST dengan notebook historis oleh tes yang ada. Input model adalah tensor `[B,3,512,512]`. Bentuk di bawah **diturunkan dari konfigurasi kanal dan stride**, bukan hasil ekstraksi fitur checkpoint KC; `forward_features` mengembalikan tensor `head` sebelum `pool` dan `classifier`.
+
+| Titik setelah modul | Bentuk per gambar pada 512² | Usulan ringkasan | FP16 keluaran per gambar | Estimasi FP16 untuk 1.618 validation × 4 kondisi |
+| --- | --- | --- | ---: | ---: |
+| `stem` (awal) | `[32,256,256]` | global average + opsi spatial pooling 4×4 | 4,00 MiB | 25,28 GiB |
+| `blocks[3]` / `IRB+A-2` (awal-menengah) | `[96,64,64]` | global average + spatial pooling 4×4 | 0,75 MiB | 4,74 GiB |
+| `blocks[6]` / `EMB-2` (menengah) | `[128,32,32]` | global average + spatial pooling 2×2/4×4 | 0,25 MiB | 1,58 GiB |
+| `blocks[8]` / `EMB-3` (penultimate spatial) | `[160,16,16]` | global average atau spatial pooling 4×4 | 0,078 MiB | 0,49 GiB |
+| `head` (sebelum classifier pooling) | `[320,16,16]` | `pool` bawaan/global average | 0,156 MiB | 0,99 GiB |
+| `pool(features).flatten(1)` (pre-classifier) | `[320]` | vektor 320 dimensi | 640 byte | ~3,95 MiB |
+
+Estimasi peta penuh mengabaikan header, indeks, dan kompresi; empat kondisi berarti dua checkpoint × dua preprocessing. Menyimpan vektor pooled jauh lebih hemat daripada peta spasial. Untuk audit fitur kelak, gunakan hook pada modul bernama atau `forward_features` tanpa mengubah source historis, dengan `eval()` dan inference mode. Cache fitur baru sebaiknya content-addressed oleh SHA gambar, hash manifest dan split validation, hash checkpoint, hash model/preprocessing, versi library, titik modul, strategi pooling, dtype, bentuk tensor, serta versi skema. Catat urutan baris dan checksum array, tulis secara atomik, dan verifikasi sampling ulang terhadap ekstraksi langsung. Jangan membuatnya di dalam Git atau direktori dataset. Tidak ada implementasi atau inferensi fitur pada tahap ini.
+
+`logits = W h + b` untuk vektor pooled `h ∈ ℝ³²⁰`. Semua transformasi yang hanya memakai logits/probabilitas, termasuk probabilitas kumulatif ordinal, adalah fungsi deterministik dari keluaran yang sudah ada; proyeksi linear dari `h` dengan bobot di ruang baris `W` juga tidak menambah informasi. Proyeksi yang memakai komponen `h` di luar ruang baris `W`, atau fitur spasial sebelum pooling, **mungkin** membawa informasi tambahan, tetapi belum tentu terkait keparahan atau meningkatkan generalisasi. Klaim tersebut memerlukan evaluasi validation yang terkontrol, pembanding berbasis logits, dan pemeriksaan kebocoran sebelum metode fitur layak dikembangkan. Menggabungkan teknik yang sudah dikenal saja bukan klaim novelty.
