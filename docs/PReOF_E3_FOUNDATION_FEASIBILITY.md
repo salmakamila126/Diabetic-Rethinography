@@ -1,6 +1,6 @@
 # E3 frozen-model enhancement sensitivity and foundation-model feasibility
 
-**Status (15 November 2026):** E3 code and synthetic tests are ready for a manual KC validation pilot. No E3 inference or real E3 result has been run here. E0, E1, and E2 findings in this section are operator-reported from KC: E0 did not show convincing incremental error-detection AUPRC from cross-preprocessing response; E1 showed large preprocessing-mismatch degradation; E2 showed substantial representation drift but no positive AUPRC interval in the 16 primary all-layer comparisons. The decision remains **NO-GO** for full PReOF, drift-guided fusion, and selective alignment on current evidence.
+**Status (15 November 2026):** The operator reports that E3 completed on KC for 43 APTOS2019 and 40 DDR validation images across the 11 prespecified conditions. Both datasets showed strong native-preprocessing dependence; BG sigma changes degraded BG10-trained models, while V1 models tolerated the gamma conditions relatively better than BG or CLAHE. These are exploratory pilot observations, not locally re-audited results or independent confirmation. E0–E2 findings in this section are likewise operator-reported from KC. The decision remains **NO-GO** for full PReOF, drift-guided fusion, and selective alignment on current evidence. This document retains the original E3 protocol and manual commands for provenance; the subsequent controlled adaptation design is in [E4/E5](FOUNDATION_ADAPTATION_E4_E5.md).
 
 ## 1. Fixed E3 protocol
 
