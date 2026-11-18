@@ -292,3 +292,206 @@ histories. Nine primary arms across two datasets could consume roughly
 2.3-2.7 GiB; this is an estimate, not measured storage. Start with one
 reviewed arm per dataset and inspect actual free space before any
 pilot. No pilot run directory has been created by this phase.
+
+## Phase 3B — deterministic V2 BG10 input cache (new protocol)
+
+This section supersedes the *uncached runner instructions* above for new cached
+pilots. The earlier incomplete APTOS pilot at
+`~/Kel_13/cadvit_novelty_pilots/APTOS2019/p2_p3_probe_seed42_e2_mb1_eff16_fp32`
+is preserved and must not be resumed. Cached runs use
+`~/Kel_13/cadvit_novelty_pilots_cached/` and a separate external cache root
+`~/Kel_13/cadvit_v2_cache/`. The runner refuses the old output root when
+`--cache-mode on`.
+
+The cache stores exactly the deterministic `preprocess_fundus_v2` result:
+lossless C-contiguous `uint8` RGB [512,512,3] in uncompressed `.npy`.
+No crop, blur, Ben Graham sigma, EXIF/RGB handling, normalization, or tensor
+conversion is replaced. `V2FundusSplit` applies the unchanged stochastic
+horizontal flip, vertical flip, and affine transform **after** cache retrieval
+for train, then CHW float32 / 255. Validation has no augmentation.
+`--cache-mode off` takes the original direct path.
+
+Each namespace hashes the frozen manifest SHA, V2 configs, preprocessing and
+cache implementation source, Pillow/OpenCV/NumPy versions, dataset, dtype,
+shape, and format. An entry key also hashes the source-image SHA from the
+verified train/validation manifest. The entry metadata records source SHA,
+protocol ID, `.npy` SHA, pixel SHA, dtype, and shape. Reads validate all of
+these. Missing or corrupted entries are rebuilt from a source file only after
+its SHA matches the frozen manifest. A stable namespace-level Linux
+`fcntl.flock` serializes writers and is released by the kernel if a process
+exits; its small lock file may remain harmlessly. Data and metadata are written
+with fsync and atomic replace. A torn pair is rejected and rebuilt under the
+next lock; an orphan temporary file from a hard crash is not silently deleted.
+No bulk array is held in RAM: entries are loaded one at a time, and DataLoader
+workers remain at the original zero setting. Existing B1/foundation or reproduction
+caches are neither read nor modified.
+
+The cache identity/root and full protocol enter `config.json` and saved
+checkpoint records. The runner source hash now also includes
+`novelty/cadvit_input_cache.py`. Resume requires identical configuration,
+code hashes, library versions, and cache identity; it cannot silently resume
+the old uncached run. Preflight still checks every train/validation source
+image and the pinned CAD-ViT checkpoint before cache use. No test row is
+instantiated.
+
+**Storage policy (corrected in Phase 3C).** A 786,432-byte pixel array
+produces a 786,560-byte NPY file. On KC, that file allocated 790,528 bytes
+and its 507-byte JSON allocated another 4,096 bytes. The old 790,528-byte
+entry budget omitted the JSON block. The corrected conservative budget is
+798,720 bytes per unique image, including allowance for directory/lock
+overhead. At row-count worst case, APTOS needs **2.452 GiB**, DDR
+**8.383 GiB**, together **10.835 GiB**. Actual frozen train/validation
+manifests have 3,183 and 11,178 unique image hashes, giving conservative
+**2.368 GiB** and **8.315 GiB** respectively (**10.683 GiB** combined).
+An additional entry budget covers an atomic temporary write; a single
+namespace lock file is shared by its entries. Existing orphan temporary files
+and concurrent users consume real free space and are not assumed absent.
+The **8 GiB free** reserve is an engineering policy, not a measured training
+minimum. Warm-up checks before the build; every new/repair entry checks again.
+A populated cache is not reserved twice. Recheck shared-disk free space
+before any full build.
+
+**Historical Phase 3B six-image APTOS subset, CPU only (3 first validation + 3 first
+training rows, fixed manifest order):** direct uncached preprocessing
+**1.397 s**, first cache fill including source hashing and writes **1.700 s**,
+warm reads including entry integrity checks **0.00655 s**. All six cached
+arrays matched direct arrays exactly. Six `.npy` files occupied
+**4,719,360 bytes**. The subset IDs were validation
+`0083ee8054ee`, `00a8624548a9`, `012a242ac6ff`; training
+`000c1434d8d7`, `001639a390f0`, `0024cdab0c1e`.
+The small, warm OS page-cache measurement is not a full-epoch throughput
+forecast. Six then-current-source APTOS entries were built under namespace
+`b1aa4c114a5ed26171675c52cbdec392cfb3dbad49af28e2c78831d90d715601`.
+The two earlier draft-source benchmark namespaces
+`7f5e969cf1f0af7c33fa08f5a9293c197cd9b47ff1dada53694eb612e9e15687`
+and `aaa6a1974d2d79fff2aed4e9b06ccb0670af6e1eb04be64af9b11b27ed7a75a0`
+remain intact. There are 18 small APTOS entries across three namespaces
+(14,158,080 bytes of NPY files); no DDR entries were built or deleted.
+
+**Manual KC commands, not executed here.** All commands run from the
+`preof-kc` repository root. `cache-warmup` requires an explicit positive
+`--warm-limit` (maximum 12,000), checks disk before writing, and reports
+progress and rechecks the 8 GiB reserve before each entry write. `both` orders validation first, then training. The full APTOS
+limit is 366+2,930=3,296; the full DDR limit would be 1,252+10,018=11,270.
+Only run full warm-up after separate approval and fresh disk review.
+
+```bash
+cd /mnt/home/probation-03/Kel_13/Diabetic-Rethinography-Novelty
+ROOT=/mnt/home/probation-03/Kel_13
+OUT="$ROOT/cadvit_novelty_pilots_cached"
+CACHE="$ROOT/cadvit_v2_cache"
+../.venv/bin/python -m novelty.cadvit_pilot preflight --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset APTOS2019 --ablation p2_p3_probe --micro-batch 1 --epochs 2
+# Future full APTOS warm-up after approval; not run in Phase 3B:
+../.venv/bin/python -m novelty.cadvit_pilot cache-warmup --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --warm-split both --warm-limit 3296 --dataset APTOS2019 --ablation p2_p3_probe --micro-batch 1 --epochs 2
+read -r -p "Approved free GPU index (0 or 1): " GPU
+CUDA_VISIBLE_DEVICES="$GPU" ../.venv/bin/python -m novelty.cadvit_pilot smoke --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset APTOS2019 --ablation p2_p3_probe --micro-batch 1 --epochs 2 --device cuda
+# Only after a 512x512 GPU smoke and scientific approval:
+CUDA_VISIBLE_DEVICES="$GPU" ../.venv/bin/python -m novelty.cadvit_pilot pilot --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset APTOS2019 --ablation p2_p3_probe --micro-batch 1 --epochs 2 --device cuda
+```
+
+The DDR interface is identical except for its own manifest/checkpoint/output
+namespace. **Do not execute DDR full warm-up yet.**
+
+```bash
+cd /mnt/home/probation-03/Kel_13/Diabetic-Rethinography-Novelty
+ROOT=/mnt/home/probation-03/Kel_13
+OUT="$ROOT/cadvit_novelty_pilots_cached"
+CACHE="$ROOT/cadvit_v2_cache"
+../.venv/bin/python -m novelty.cadvit_pilot preflight --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset DDR --ablation p2_p3_probe --micro-batch 1 --epochs 2
+# Future DDR warm-up only after separate approval:
+../.venv/bin/python -m novelty.cadvit_pilot cache-warmup --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --warm-split both --warm-limit 11270 --dataset DDR --ablation p2_p3_probe --micro-batch 1 --epochs 2
+read -r -p "Approved free GPU index (0 or 1): " GPU
+CUDA_VISIBLE_DEVICES="$GPU" ../.venv/bin/python -m novelty.cadvit_pilot smoke --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset DDR --ablation p2_p3_probe --micro-batch 1 --epochs 2 --device cuda
+# Only after a 512x512 GPU smoke and scientific approval:
+CUDA_VISIBLE_DEVICES="$GPU" ../.venv/bin/python -m novelty.cadvit_pilot pilot --artifact-root "$ROOT" --output-root "$OUT" --cache-mode on --cache-root "$CACHE" --dataset DDR --ablation p2_p3_probe --micro-batch 1 --epochs 2 --device cuda
+```
+
+For a compatible interrupted *cached* run, replace `pilot` with `resume`
+and keep every CLI option identical. Do not resume the uncached Phase 2 run.
+No GPU smoke, training, full APTOS cache, or DDR cache build was executed
+during Phase 3B.
+
+## Phase 3C — independent CPU audit and corrections
+
+Relative to baseline commit `e280340`, only the novelty cache module, pilot
+runner, two CAD-ViT test files, this protocol, and `CAD_ViT_Novelty.ipynb`
+are involved. Reproduction, foundation, manifests, checkpoints, and completed
+pilot outputs are unchanged. Three cache defects were reproduced and fixed:
+a valid JSON list caused an uncaught `AttributeError` instead of repair; an
+abandoned exclusive lock file blocked repair after a writer crash; and the
+entry disk budget omitted a JSON filesystem block. Regression tests now cover
+non-object metadata, crash-released writer locking/torn publication, and
+actual allocated file blocks. CPU preflight also stopped using
+`torch.cuda.get_device_name`; a read-only `nvidia-smi` inventory records
+GPU names without initializing CUDA.
+
+Final-source, isolated temporary-cache audit selected the first train and
+validation image in each of grades 0–4 **separately for APTOS and DDR**.
+Each image's canonical path, frozen-manifest source hash, label, split,
+direct V2 RGB array, cached array, and normalized float32 tensor matched.
+Identical torch RNG states produced identical train tensors. Two epoch
+seeds produced different augmented tensors while cached pixels remained
+unchanged. Validation repeated exactly. Cache-hit processing was patched
+to fail if `preprocess_fundus_v2` ran and passed without invoking it.
+Missing, stale, corrupted, and torn entries rebuilt; concurrent readers
+caused one preprocessing write. The temporary test caches were bounded to
+10 entries per dataset and removed after audit. No final-test row was used.
+
+| Dataset | First-per-grade train+val images | Direct V2 | Cold fill | Warm read | Exact arrays/tensors |
+| --- | ---: | ---: | ---: | ---: | --- |
+| APTOS2019 | 10 | 2.065 s | 2.525 s | 0.01234 s | PASS |
+| DDR | 10 | 0.722 s | 1.239 s | 0.01242 s | PASS |
+
+These are measured serial CPU timings on 10 fixed images per dataset. Cold
+fill was measured after direct decoding, so the OS may already have cached
+source-file pages. Warm read includes entry SHA checks and may benefit from
+the OS page cache. They are not full-epoch throughput estimates. Full
+manifest/source-image hashing and strict archived-checkpoint loading happen
+once per CLI invocation, not once per epoch. Cache hits read and hash one
+NPY per image per epoch; deterministic Gaussian blur runs only on misses.
+Augmentation and tensor conversion still run per training draw.
+
+At the Phase 3C audit snapshot, `/mnt/home` had approximately **13.94 GiB**
+free and was 99% utilized. APTOS alone fits the conservative unique-image
+estimate plus 8 GiB reserve at that instant, but shared capacity fell by
+about 8 GiB during the audit. DDR alone needs about **16.315 GiB** including
+the reserve and is **blocked** at that snapshot; both together need about
+**18.683 GiB** plus transient/shared-use allowance. Full warm-up remains
+unapproved and must not be started from this audit. The existing 18 small
+APTOS benchmark entries under three older source-hash namespaces remain
+untouched; the repaired final source uses new cache identities.
+
+
+## Phase 3C cross-filesystem cache audit (conditional path)
+
+The proposed cache root `/var/tmp/probation-03/cadvit_v2_cache` is on
+`/dev/nvme0n1p2`, separate from the artifacts and cached-run output on
+`/mnt/home`. At the read-only audit snapshot, the cache filesystem had
+171.885 GiB free; `/mnt/home` had 13.887 GiB free. The cache guard checks
+the nearest existing ancestor of the entry directory, so an absent cache
+root uses the filesystem of its actual writable parent. It rejects an
+unwritable or non-directory ancestor before a warm-up or pilot begins.
+Data, JSON metadata, the namespace lock, and atomic temporary files are
+all constructed beneath the cache root. Entry paths that escape through a
+namespace symlink or cross to a nested mount are rejected. Training checkpoints and logs
+remain under `OUT` on `/mnt/home`, which needs its own capacity review.
+
+The corrected per-entry budget and 8 GiB cache-filesystem reserve remain
+unchanged: 3,183 unique APTOS images require approximately 2.368 GiB,
+11,178 unique DDR images approximately 8.316 GiB, and both approximately
+10.684 GiB plus one 8 GiB reserve. These estimates include one temporary
+entry per build and conservative metadata/directory allowance. Shared
+usage and orphan files can consume additional capacity. No full cache was
+built in this audit.
+
+**Only after lab approval for this location**, use the Phase 3B command
+blocks above with this one replacement:
+
+```bash
+CACHE=/var/tmp/probation-03/cadvit_v2_cache
+```
+
+Keep `ROOT` and `OUT` unchanged. Earlier command blocks retain the
+historical `$ROOT/cadvit_v2_cache` value and should not be used for
+cross-filesystem warm-up without this override. Confirm ownership,
+retention/cleanup policy, and fresh free space before any build.

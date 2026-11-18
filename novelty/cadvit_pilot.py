@@ -30,6 +30,7 @@ from novelty.cadvit_training import (
     research_loss, restricted_checkpoint_state, transfer_baseline_state,
 )
 from novelty.foundation_adaptation import load_train_val_manifest
+from novelty.cadvit_input_cache import V2ImageCache
 from reproduction.cadvit import experiments
 from reproduction.cadvit.model import CADViTCandidate
 from reproduction.cadvit.evaluation import classification_metrics
@@ -90,7 +91,8 @@ def _git_identity():
 def _source_hashes():
     files = (
         "novelty/cadvit_model.py", "novelty/cadvit_training.py",
-        "novelty/cadvit_pilot.py", "novelty/foundation_adaptation.py",
+        "novelty/cadvit_pilot.py", "novelty/cadvit_input_cache.py",
+        "novelty/foundation_adaptation.py",
         "reproduction/cadvit/model.py", "reproduction/cadvit/preprocessing.py",
         "reproduction/cadvit/experiments.py",
     )
@@ -98,12 +100,22 @@ def _source_hashes():
 
 
 def _environment():
+    """Record GPU inventory without initializing a CUDA context in preflight."""
+    try:
+        inventory = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, check=False, timeout=5)
+        gpu_names = (inventory.stdout.strip().splitlines()
+                     if inventory.returncode == 0 else None)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        gpu_names = None
     return {
         "python": sys.version.split()[0], "platform": platform.platform(),
         "torch": torch.__version__, "torchvision": torchvision.__version__,
         "numpy": np.__version__, "opencv": cv2.__version__,
         "pillow": PIL.__version__, "cuda_runtime": torch.version.cuda,
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpu_inventory": gpu_names,
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
     }
 
 
@@ -183,7 +195,8 @@ def _checkpoint_preflight(dataset, artifact_root, manifest_sha):
     }
 
 
-def preflight(artifact_root, output_root, dataset, ablation, micro_batch=1, epochs=2):
+def preflight(artifact_root, output_root, dataset, ablation, micro_batch=1, epochs=2,
+              cache_mode="off", cache_root=None):
     """Hash train/val source images and the exact checkpoint; never open test."""
     run_dir = _run_dir(artifact_root, output_root, dataset, ablation, micro_batch, epochs)
     rows, manifest = load_train_val_manifest(artifact_root, dataset, verify_images=True)
@@ -191,6 +204,23 @@ def preflight(artifact_root, output_root, dataset, ablation, micro_batch=1, epoc
         raise ValueError("Expected nonempty train/validation only")
     state, checkpoint = _checkpoint_preflight(
         dataset, artifact_root, manifest["manifest_sha256"])
+    if cache_mode not in ("off", "on"):
+        raise ValueError("Cache mode must be off or on")
+    if cache_mode == "off":
+        if cache_root is not None:
+            raise ValueError("Cache root supplied while cache is disabled")
+        cache_info = {"enabled": False}
+    else:
+        if cache_root is None:
+            raise ValueError("Enabled cache requires --cache-root")
+        old_output = (Path(artifact_root).expanduser().resolve()
+                      / "cadvit_novelty_pilots")
+        new_output = Path(output_root).expanduser().resolve()
+        if new_output == old_output or old_output in new_output.parents:
+            raise ValueError("Cached runs must use a new output root")
+        cache = V2ImageCache(cache_root, artifact_root, dataset,
+                             manifest["manifest_sha256"], output_root)
+        cache_info = cache.record()
     manifest_path = Path(artifact_root).expanduser().resolve() / "cad_vit_runs" / "manifests" / f"{dataset}_seed42.csv"
     record = _json_normal({
         "schema": SCHEMA, "dataset": dataset, "ablation": ablation,
@@ -202,6 +232,7 @@ def preflight(artifact_root, output_root, dataset, ablation, micro_batch=1, epoc
             "sidecar_sha256": file_sha256(manifest_path.with_suffix(".json")),
         },
         "checkpoint": checkpoint,
+        "cache": cache_info,
         "preprocessing": {
             "name": "V2_BG10_STABLE",
             "base": PREPROCESS_CONFIG, "ben_graham": BG_V2_CONFIG,
@@ -232,14 +263,28 @@ def preflight(artifact_root, output_root, dataset, ablation, micro_batch=1, epoc
     return record, rows, state, run_dir
 
 
+def _cache_from_record(record):
+    info = record["cache"]
+    if not info["enabled"]:
+        return None
+    artifact_root = Path(record["manifest"]["path"]).parents[2]
+    output_root = Path(record["run_dir"]).parents[1]
+    cache = V2ImageCache(info["root"], artifact_root, record["dataset"],
+                         record["manifest"]["manifest_sha256"], output_root)
+    if cache.record() != info:
+        raise ValueError("Cache protocol or implementation changed; resume refused")
+    return cache
+
+
 class V2FundusSplit(Dataset):
     """Exact deterministic V2 BG10 preprocessing, then train-only augmentation."""
 
-    def __init__(self, rows, split):
+    def __init__(self, rows, split, cache=None):
         if split not in ("train", "val"):
             raise ValueError("Only train and val splits are permitted")
         self.rows = rows[split]
         self.split = split
+        self.cache = cache
         self.augment = (transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
@@ -254,20 +299,23 @@ class V2FundusSplit(Dataset):
         row = self.rows[index]
         if row["split"] != self.split:
             raise ValueError("Split row mismatch")
-        with Image.open(row["path"]) as image:
-            pixels = preprocess_fundus_v2(image, PREPROCESS_CONFIG, BG_V2_CONFIG)
+        if self.cache is None:
+            with Image.open(row["path"]) as image:
+                pixels = preprocess_fundus_v2(image, PREPROCESS_CONFIG, BG_V2_CONFIG)
+        else:
+            pixels = self.cache.get(row)
         if self.augment is not None:
             pixels = np.asarray(self.augment(Image.fromarray(pixels)))
         tensor = torch.from_numpy(np.array(pixels, copy=True, order="C")).permute(2, 0, 1).float() / 255
         return tensor, row["label"]
 
 
-def make_loader(rows, split, micro_batch, epoch=0, device="cpu"):
+def make_loader(rows, split, micro_batch, epoch=0, device="cpu", cache=None):
     if split not in ("train", "val"):
         raise ValueError("No test loader exists")
     generator = torch.Generator().manual_seed(SEED + epoch)
     return DataLoader(
-        V2FundusSplit(rows, split), batch_size=micro_batch,
+        V2FundusSplit(rows, split, cache=cache), batch_size=micro_batch,
         shuffle=split == "train", generator=generator, num_workers=0,
         pin_memory=str(device).startswith("cuda"),
     )
@@ -410,6 +458,9 @@ def pilot(record, rows, baseline_state, run_dir, *, resume=False, device_name="c
             raise FileNotFoundError(run_dir)
     elif run_dir.exists():
         raise FileExistsError("Run already exists; select resume or a new protocol")
+    cache = _cache_from_record(record)
+    if cache is not None:
+        cache.ensure_space(rows["val"] + rows["train"])
     _seed_all()
     model = _make_model(record["ablation"])
     transfer_baseline_state(model, baseline_state)
@@ -428,8 +479,10 @@ def pilot(record, rows, baseline_state, run_dir, *, resume=False, device_name="c
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         start_time = time.perf_counter()
-        train_loader = make_loader(rows, "train", settings["micro_batch"], epoch, device)
-        val_loader = make_loader(rows, "val", settings["micro_batch"], epoch, device)
+        train_loader = make_loader(rows, "train", settings["micro_batch"],
+                                   epoch, device, cache)
+        val_loader = make_loader(rows, "val", settings["micro_batch"],
+                                 epoch, device, cache)
         train_metrics = _train_epoch(model, train_loader, optimizer, device,
                                      flags, settings["accumulation"])
         train_seconds = time.perf_counter() - start_time
@@ -498,7 +551,7 @@ def synthetic_smoke(record, baseline_state, device_name="cuda"):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "smoke", "pilot", "resume"))
+    parser.add_argument("mode", choices=("preflight", "cache-warmup", "smoke", "pilot", "resume"))
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--dataset", choices=tuple(CHECKPOINTS), required=True)
@@ -506,13 +559,29 @@ def main(argv=None):
     parser.add_argument("--micro-batch", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    parser.add_argument("--cache-mode", choices=("off", "on"), default="off")
+    parser.add_argument("--cache-root", type=Path)
+    parser.add_argument("--warm-limit", type=int, default=0)
+    parser.add_argument("--warm-split", choices=("val", "train", "both"), default="both")
     args = parser.parse_args(argv)
     record, rows, state, run_dir = preflight(
         args.artifact_root, args.output_root, args.dataset,
-        args.ablation, args.micro_batch, args.epochs)
+        args.ablation, args.micro_batch, args.epochs,
+        args.cache_mode, args.cache_root)
     if args.mode == "preflight":
         print(json.dumps({"status": "PASS", "run_dir": str(run_dir),
                           "record": record}, indent=2, sort_keys=True), flush=True)
+    elif args.mode == "cache-warmup":
+        cache = _cache_from_record(record)
+        if cache is None:
+            raise ValueError("Warm-up requires --cache-mode on")
+        if args.warm_split == "both":
+            selected = rows["val"] + rows["train"]
+        else:
+            selected = rows[args.warm_split]
+        result = cache.warm(selected, args.warm_limit)
+        print(json.dumps({"status": "PASS", "dataset": args.dataset,
+                          "split": args.warm_split, **result}, sort_keys=True), flush=True)
     elif args.mode == "smoke":
         print(json.dumps(synthetic_smoke(record, state, args.device), indent=2), flush=True)
     else:

@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 import numpy as np
 from PIL import Image
@@ -35,6 +37,16 @@ class PilotTests(unittest.TestCase):
     def setUpClass(cls):
         torch.set_num_threads(1)
 
+    def test_preflight_environment_does_not_initialize_cuda(self):
+        with patch.object(pilot.torch.cuda, "get_device_name",
+                          side_effect=AssertionError("CUDA context in preflight")):
+            with patch.object(pilot.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0,
+                                                           stdout="RTX 3060\n")):
+                environment = pilot._environment()
+        self.assertEqual(environment["gpu_inventory"], ["RTX 3060"])
+        self.assertIn("cuda_visible_devices", environment)
+
     def test_baseline_arm_is_original_class(self):
         self.assertIs(type(pilot._make_model("baseline")), CADViTCandidate)
         self.assertIs(type(pilot._make_model("p1_only")), NovelCADViT)
@@ -53,6 +65,23 @@ class PilotTests(unittest.TestCase):
                 pilot._run_dir(artifact, output, "DDR", "baseline", 3, 2)
             with self.assertRaises(ValueError):
                 pilot._run_dir(artifact, output, "DDR", "baseline", 1, 80)
+
+    def test_cached_protocol_rejects_legacy_output_and_overwrite(self):
+        artifact = ROOT.parent
+        old_output = artifact / "cadvit_novelty_pilots"
+        rows = {"train": [{}], "val": [{}]}
+        with patch.object(pilot, "load_train_val_manifest",
+                          return_value=(rows, {"manifest_sha256": "a"*64})):
+            with patch.object(pilot, "_checkpoint_preflight",
+                              return_value=({}, {})):
+                with self.assertRaisesRegex(ValueError, "new output root"):
+                    pilot.preflight(artifact, old_output, "APTOS2019",
+                                    "p2_p3_probe", 1, 2, "on",
+                                    artifact / "cadvit_v2_cache")
+        with TemporaryDirectory() as existing:
+            with self.assertRaises(FileExistsError):
+                pilot.pilot({"ablation": "p2_p3_probe"}, {}, {},
+                            Path(existing), device_name="cpu")
 
     def test_only_train_and_validation_dataset(self):
         with self.assertRaises(ValueError):
@@ -130,7 +159,8 @@ class PilotTests(unittest.TestCase):
             run_dir = Path(directory)
             model = TinyFiveClass()
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-            record = {"schema": pilot.SCHEMA, "synthetic": True}
+            record = {"schema": pilot.SCHEMA, "synthetic": True,
+                      "cache": {"enabled": True, "identity": "a"*64}}
             (run_dir / "config.json").write_text(json.dumps(record), encoding="utf-8")
             entry = {"epoch": 1, "val": {"f1_macro": 0.5, "loss": 0.8}}
             (run_dir / "history.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
@@ -145,6 +175,11 @@ class PilotTests(unittest.TestCase):
             torch.save(state, run_dir / "best.pt")
             self.assertEqual(pilot._restore_run(
                 run_dir, record, model, optimizer, torch.device("cpu"))[0], 1)
+            changed = dict(record)
+            changed["cache"] = {"enabled": True, "identity": "b"*64}
+            with self.assertRaisesRegex(ValueError, "config changed"):
+                pilot._restore_run(run_dir, changed, model, optimizer,
+                                   torch.device("cpu"))
             (run_dir / "history.jsonl").write_text(
                 json.dumps({"epoch": 2, "val": entry["val"]}) + "\n", encoding="utf-8")
             with self.assertRaises(ValueError):
