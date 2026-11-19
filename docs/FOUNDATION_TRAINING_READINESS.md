@@ -1,5 +1,47 @@
 # Foundation adaptation: final training readiness audit
 
+## Verified KC B0–B4 validation update (19 November 2026)
+
+The 16 November audit below is retained as a **historical snapshot** of the evidence then available; its “B0 operator-reported” and “B1/B2 not run” wording is superseded by this section. Ten completed 20-epoch ConvNeXt-Tiny runs now have independently inspected KC `run.json`, `history.json`, `summary.json`, and best-checkpoint sidecars. All 10 best checkpoint binaries matched their sidecar SHA-256; all 200 original epoch objects are preserved in [validation evidence](../novelty/convnext_b0_b4/validation_evidence.json). The [novelty notebook](../CAD_ViT_Novelty.ipynb) provides per-class tables, confusion matrices, curves, and interpretation. These are **validation** results only; no ConvNeXt final-test result is reported.
+
+| Dataset | Arm | Best epoch | Accuracy | Macro-F1 | Weighted-F1 | QWK | Grade MAE |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| APTOS2019 | B0 | 17 | 0.814208 | 0.673686 | 0.817133 | 0.889230 | 0.243169 |
+| APTOS2019 | B1 | 16 | 0.830601 | 0.701124 | 0.832144 | 0.898623 | 0.221311 |
+| APTOS2019 | B2 | 7 | 0.797814 | 0.659987 | 0.802774 | 0.882524 | 0.262295 |
+| APTOS2019 | B3 | 20 | 0.827869 | 0.700624 | 0.829804 | 0.899896 | 0.221311 |
+| APTOS2019 | B4-Q | 11 | 0.819672 | 0.688319 | 0.823274 | 0.893995 | 0.234973 |
+| APTOS2019 | B4-R | 9 | 0.827869 | 0.707897 | 0.831054 | 0.898937 | 0.221311 |
+| DDR | B0 | 8 | 0.807508 | 0.619817 | 0.795273 | 0.820307 | 0.312300 |
+| DDR | B1 | 11 | 0.826677 | 0.652146 | 0.818245 | 0.843538 | 0.275559 |
+| DDR | B2 | 5 | 0.770767 | 0.623084 | 0.774761 | 0.800902 | 0.361022 |
+| DDR | B3 | 11 | 0.818690 | 0.651006 | 0.813732 | 0.843194 | 0.281949 |
+
+B0 is vanilla full fine-tuning. B1 uses only the approved conservative stochastic training augmentation. B2 replaces ordinary CE with train-frequency inverse-square-root weights `w_c = n_c^-0.5 / (sum_j n_j*n_j^-0.5 / N_train)`; validation loss remains ordinary CE. B3 uses B1 augmentation plus grade-3 targeted sampling at 10% of an unchanged epoch length. B4-Q removes 50 APTOS training rows in 24 conflicting-label SHA groups; B4-R removes 50 class-matched rows in 27 intact nonconflicting SHA groups. Both B4 arms retain 2,880 training and the original 366 validation rows. DDR has no identical-SHA conflicting-label groups under the audited manifests, so B4 DDR is absent **by design**. B3 and B4 executable source remains external to Git; its audited hashes are in the evidence JSON. This documentation does not import or publish that source.
+
+The fixed comparison controls are seed 42, 20 epochs, effective batch 32, official ConvNeXt-Tiny weight/processor snapshots, BF16, AdamW, backbone/head learning rates 1e-5/1e-3, and weight decay 0.01. Checkpoints are selected by maximum validation macro-F1, then lower validation loss, then earliest epoch. Manifest SHA-256: APTOS `73d1546e3c2fd2bf9e3d0fd10af914cb523d28e4bc8e1f25212af454d4be8854`; DDR `7bc3e3916e012bc46fcd9cd69aa469e0daf3229e1273f1d8ecb6054899bf6eb1`. The evidence JSON records run configuration and SHA-256 of each source file and figure, while excluding absolute image paths.
+
+### Scientific decision and remaining work
+
+The best validation macro-F1 is APTOS B4-R 0.707897 and DDR B1 0.652146. **This is not a recommendation to select an arm on that single number.** APTOS grade-1 recall falls from B1 0.714286 to B4-R 0.600000, even while macro-F1 rises. DDR B2 grade-1 recall 0.253968 exceeds B1 0.174603 despite lower macro-F1. Grade-3 support is only 20 APTOS and 24 DDR; per-class uncertainty is material. B4-R outperforming B4-Q descriptively does not establish that label-conflict quarantine causes a loss: removed groups differ (27 versus 24), and both use one seed and the same validation set for checkpoint selection. Nine of ten best macro-F1 epochs precede epoch 20. All validation-loss minima precede the final epoch. More epochs are therefore **not presumed to improve generalization**.
+
+The proposed **maximum 50-epoch budget** is a future controlled protocol, not a completed result. If approved later, use new isolated runs with prespecified arms, identical original train/validation manifests and selection rule, checkpoints at epochs 20/40/50, multiple seeds, and a stopping rule independent of final test. Preserve the completed 20-epoch checkpoints; do not silently resume them into a new scientific configuration. Review grade-1 and grade-3 recall, QWK, calibration, and validation loss alongside macro-F1. No 50- or 100-epoch results are claimed here.
+
+The candidate engineering objective is **lower CPU inference latency while preserving macro-F1, QWK, and minority-grade recall**. No CPU latency, ONNX, or quantization result has been measured in this repository. Before a claim, fix hardware/threads/runtime, preprocessing inclusion, warm-up, batch=1 and representative throughput mode, repeated timed runs, peak RAM, model bytes, and paired predictions on the frozen validation set. Compare the same frozen checkpoint in FP32 PyTorch, export-equivalent ONNX, and quantized variants; verify numerical/label agreement and grade-wise regression. A latency gain at degraded minority recall would fail the objective. Never use final test for tuning. Existing preprocessing-cache throughput figures are **training input figures**, not CPU inference benchmarks.
+
+### Targeted prior art and claim boundary
+
+| Primary source | Established result or method | Relation and remaining gap |
+| --- | --- | --- |
+| [Liu et al., CVPR 2022, ConvNeXt](https://openaccess.thecvf.com/content/CVPR2022/html/Liu_A_ConvNet_for_the_2020s_CVPR_2022_paper.html) | ConvNeXt architecture and efficiency study | Backbone substitution itself is established; GPU benchmark figures do not answer our CPU latency question. |
+| [Paranthaman et al., Frontiers in AI 2026](https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2026.1812599/full) | ConvNeXt-Tiny/Swin-Tiny DR classification on APTOS; reports repeated-run test macro-F1 | Five-class DR and ConvNeXt overlap directly; their split, training, and test protocol differ, so numerical scores are not directly comparable. |
+| [Dong et al., ICCV 2019, HAWQ](https://openaccess.thecvf.com/content_ICCV_2019/html/Dong_HAWQ_Hessian_AWare_Quantization_of_Neural_Networks_With_Mixed-Precision_ICCV_2019_paper.html) | Mixed-precision quantization is established | Quantization for latency alone is not a methodological novelty claim; device-specific and minority-grade trade-offs remain unmeasured here. |
+
+This is a **targeted initial audit**, not a complete novelty search. Ordinary augmentation, weighted CE, resampling, label-conflict filtering, ONNX export, and quantization are established interventions. No first-of-kind, clinical, or state-of-the-art claim follows from the ten validation runs. Independent confirmation and a broader prior-art review are needed before any methodological contribution is proposed.
+
+## Historical audit snapshot (16 November 2026)
+
+
 **16 November 2026.** This is a validation-only research audit. The ConvNeXt results below were supplied by the KC operator; their checkpoint, manifest, history JSON and log bytes were **not available locally for independent verification**. They remain completed vanilla full-fine-tuning baselines. No change in this document authorizes editing those runs, accessing final test, or claiming clinical readiness. The initial audit added observability. Approved B0/B1/B2 implementation is described below; no KC experiment was run here.
 
 ## Evidence and current configuration

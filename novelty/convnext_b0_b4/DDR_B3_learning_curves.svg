@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1110" height="340" viewBox="0 0 1110 340" role="img">
+<rect width="100%" height="100%" fill="white"/>
+<text x="20" y="22" font-size="16" font-family="sans-serif">Foundation adaptation learning curves</text>
+<text x="40" y="40" font-size="14" font-family="sans-serif">Loss</text>
+<path d="M40,50 V275 H330" fill="none" stroke="#444"/>
+<text x="40" y="295" font-size="10">epoch 1</text>
+<text x="285" y="295" font-size="10">20</text>
+<text x="40" y="43" font-size="10">1.124</text>
+<text x="40" y="271" font-size="10">0.000</text>
+<polyline points="40.00,113.22 55.26,154.48 70.53,171.51 85.79,184.46 101.05,196.11 116.32,205.69 131.58,212.22 146.84,219.42 162.11,227.90 177.37,232.10 192.63,238.69 207.89,244.52 223.16,248.07 238.42,252.41 253.68,255.91 268.95,259.32 284.21,261.00 299.47,264.69 314.74,266.59 330.00,267.87" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="40" y="291" width="12" height="3" fill="#2563eb"/><text x="58" y="300" font-size="11" font-family="sans-serif">train</text>
+<polyline points="40.00,141.53 55.26,153.13 70.53,155.83 85.79,158.59 101.05,158.80 116.32,156.25 131.58,157.95 146.84,158.10 162.11,155.83 177.37,146.72 192.63,147.00 207.89,136.13 223.16,126.96 238.42,126.47 253.68,114.77 268.95,107.85 284.21,97.25 299.47,66.34 314.74,66.84 330.00,50.00" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="40" y="309" width="12" height="3" fill="#dc2626"/><text x="58" y="318" font-size="11" font-family="sans-serif">validation</text>
+<text x="405" y="40" font-size="14" font-family="sans-serif">Accuracy</text>
+<path d="M405,50 V275 H695" fill="none" stroke="#444"/>
+<text x="405" y="295" font-size="10">epoch 1</text>
+<text x="650" y="295" font-size="10">20</text>
+<text x="405" y="43" font-size="10">0.989</text>
+<text x="405" y="271" font-size="10">0.000</text>
+<polyline points="405.00,118.28 420.26,98.61 435.53,90.77 450.79,84.98 466.05,79.21 481.32,75.78 496.58,72.47 511.84,69.72 527.11,66.29 542.37,64.74 557.63,61.99 572.89,59.38 588.16,57.97 603.42,56.18 618.68,54.43 633.95,53.23 649.21,52.84 664.47,50.93 679.74,50.34 695.00,50.00" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="405" y="291" width="12" height="3" fill="#2563eb"/><text x="423" y="300" font-size="11" font-family="sans-serif">train</text>
+<polyline points="405.00,101.05 420.26,98.33 435.53,98.14 450.79,93.96 466.05,93.42 481.32,92.33 496.58,88.88 511.84,87.78 527.11,89.78 542.37,88.69 557.63,88.69 572.89,89.06 588.16,88.33 603.42,87.60 618.68,90.33 633.95,90.15 649.21,88.33 664.47,92.33 679.74,90.33 695.00,92.69" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="405" y="309" width="12" height="3" fill="#dc2626"/><text x="423" y="318" font-size="11" font-family="sans-serif">validation</text>
+<text x="770" y="40" font-size="14" font-family="sans-serif">Macro-F1</text>
+<path d="M770,50 V275 H1060" fill="none" stroke="#444"/>
+<text x="770" y="295" font-size="10">epoch 1</text>
+<text x="1015" y="295" font-size="10">20</text>
+<text x="770" y="43" font-size="10">0.982</text>
+<text x="770" y="271" font-size="10">0.000</text>
+<polyline points="770.00,164.05 785.26,137.32 800.53,126.89 815.79,117.90 831.05,110.88 846.32,104.02 861.58,98.28 876.84,92.21 892.11,85.76 907.37,80.87 922.63,75.18 937.89,69.76 953.16,66.63 968.42,62.80 983.68,59.06 998.95,56.47 1014.21,55.96 1029.47,52.26 1044.74,51.12 1060.00,50.00" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="770" y="291" width="12" height="3" fill="#2563eb"/><text x="788" y="300" font-size="11" font-family="sans-serif">train</text>
+<polyline points="770.00,158.86 785.26,148.49 800.53,146.15 815.79,142.38 831.05,139.19 846.32,138.64 861.58,138.02 876.84,131.59 892.11,132.12 907.37,140.33 922.63,125.91 937.89,130.95 953.16,130.21 968.42,129.91 983.68,132.28 998.95,127.17 1014.21,130.57 1029.47,135.67 1044.74,130.54 1060.00,130.94" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="770" y="309" width="12" height="3" fill="#dc2626"/><text x="788" y="318" font-size="11" font-family="sans-serif">validation</text>
+</svg>

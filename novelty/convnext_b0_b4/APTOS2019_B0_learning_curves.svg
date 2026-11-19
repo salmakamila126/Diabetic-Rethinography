@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1110" height="340" viewBox="0 0 1110 340" role="img">
+<rect width="100%" height="100%" fill="white"/>
+<text x="20" y="22" font-size="16" font-family="sans-serif">Foundation adaptation learning curves</text>
+<text x="40" y="40" font-size="14" font-family="sans-serif">Loss</text>
+<path d="M40,50 V275 H330" fill="none" stroke="#444"/>
+<text x="40" y="295" font-size="10">epoch 1</text>
+<text x="285" y="295" font-size="10">20</text>
+<text x="40" y="43" font-size="10">0.865</text>
+<text x="40" y="271" font-size="10">0.000</text>
+<polyline points="40.00,62.77 55.26,134.10 70.53,155.99 85.79,170.94 101.05,182.73 116.32,194.76 131.58,206.46 146.84,217.43 162.11,228.59 177.37,238.28 192.63,246.28 207.89,253.20 223.16,258.38 238.42,261.43 253.68,263.41 268.95,264.61 284.21,265.26 299.47,265.48 314.74,264.36 330.00,264.19" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="40" y="291" width="12" height="3" fill="#2563eb"/><text x="58" y="300" font-size="11" font-family="sans-serif">train</text>
+<polyline points="40.00,112.64 55.26,128.80 70.53,140.21 85.79,144.49 101.05,141.61 116.32,144.99 131.58,142.30 146.84,141.97 162.11,140.49 177.37,134.19 192.63,125.02 207.89,118.99 223.16,108.07 238.42,107.68 253.68,96.65 268.95,62.80 284.21,72.07 299.47,69.78 314.74,60.85 330.00,50.00" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="40" y="309" width="12" height="3" fill="#dc2626"/><text x="58" y="318" font-size="11" font-family="sans-serif">validation</text>
+<text x="405" y="40" font-size="14" font-family="sans-serif">Accuracy</text>
+<path d="M405,50 V275 H695" fill="none" stroke="#444"/>
+<text x="405" y="295" font-size="10">epoch 1</text>
+<text x="650" y="295" font-size="10">20</text>
+<text x="405" y="43" font-size="10">0.825</text>
+<text x="405" y="271" font-size="10">0.000</text>
+<polyline points="405.00,67.14 420.26,63.41 435.53,56.71 450.79,54.47 466.05,51.49 481.32,55.96 496.58,53.73 511.84,52.24 527.11,53.73 542.37,52.24 557.63,57.45 572.89,51.49 588.16,50.00 603.42,55.22 618.68,52.98 633.95,52.98 649.21,52.98 664.47,52.98 679.74,52.98 695.00,52.24" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="405" y="309" width="12" height="3" fill="#dc2626"/><text x="423" y="318" font-size="11" font-family="sans-serif">validation</text>
+<text x="770" y="40" font-size="14" font-family="sans-serif">Macro-F1</text>
+<path d="M770,50 V275 H1060" fill="none" stroke="#444"/>
+<text x="770" y="295" font-size="10">epoch 1</text>
+<text x="1015" y="295" font-size="10">20</text>
+<text x="770" y="43" font-size="10">0.674</text>
+<text x="770" y="271" font-size="10">0.000</text>
+<polyline points="770.00,131.04 785.26,119.03 800.53,82.26 815.79,66.80 831.05,62.20 846.32,72.29 861.58,57.21 876.84,58.38 892.11,54.61 907.37,55.39 922.63,57.28 937.89,52.93 953.16,52.58 968.42,60.96 983.68,54.02 998.95,57.60 1014.21,50.00 1029.47,56.42 1044.74,55.02 1060.00,52.79" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="770" y="309" width="12" height="3" fill="#dc2626"/><text x="788" y="318" font-size="11" font-family="sans-serif">validation</text>
+</svg>

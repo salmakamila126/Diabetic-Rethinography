@@ -4,6 +4,25 @@ Reproduksi parsial yang dipandu paper [CAD-ViT (2025)](https://doi.org/10.1109/A
 
 Rujukan ke sel kode atau nomor bagian lama dalam catatan di bawah menunjuk ke **notebook arsip**. Laporan utama memakai struktur ringkas baru; jangan menjalankan ulang evaluator final test dari contoh historis.
 
+## Studi ConvNeXt-Tiny B0–B4 (terpisah dari reproduksi CAD-ViT)
+
+[Notebook riset novelty](CAD_ViT_Novelty.ipynb) memuat laporan lengkap sepuluh run ConvNeXt-Tiny 20 epoch pada **validasi**: perbandingan agregat, precision/recall/F1/support tiap grade, QWK, weighted-F1, confusion matrix, learning curves, seluruh tabel epoch, dan interpretasi. [Bukti JSON dan figur](novelty/convnext_b0_b4/validation_evidence.json) menyimpan 200 catatan epoch asli beserta hash sumber/figur. [Dokumen kesiapan](docs/FOUNDATION_TRAINING_READINESS.md) memuat kontrol eksperimen, keterbatasan, dan rencana benchmark CPU. Bagian ini bukan hasil CAD-ViT P1–P4 dan bukan final test.
+
+| Dataset | Arm | Best epoch | Validation macro-F1 | QWK |
+| --- | --- | ---: | ---: | ---: |
+| APTOS2019 | B0 | 17 | 0.673686 | 0.889230 |
+| APTOS2019 | B1 | 16 | 0.701124 | 0.898623 |
+| APTOS2019 | B2 | 7 | 0.659987 | 0.882524 |
+| APTOS2019 | B3 | 20 | 0.700624 | 0.899896 |
+| APTOS2019 | B4-Q | 11 | 0.688319 | 0.893995 |
+| APTOS2019 | B4-R | 9 | 0.707897 | 0.898937 |
+| DDR | B0 | 8 | 0.619817 | 0.820307 |
+| DDR | B1 | 11 | 0.652146 | 0.843538 |
+| DDR | B2 | 5 | 0.623084 | 0.800902 |
+| DDR | B3 | 11 | 0.651006 | 0.843194 |
+
+B0 vanilla; B1 augmentasi konservatif; B2 weighted CE; B3 B1 + sampling grade 3; B4-Q karantina label-konflik dan B4-R kontrol penghapusan kelas-sama. **B4 hanya APTOS2019**, karena manifest DDR yang diaudit tidak memiliki grup SHA identik dengan label konflik. B3/B4 executable source masih eksternal di KC dan **belum tracked Git**; provenance-nya direkam dalam JSON, tanpa mengimpor source tersebut ke notebook. Seluruh hasil berasal dari satu seed dan checkpoint dipilih dengan validation macro-F1; perubahan macro-F1 tidak menjamin perbaikan recall grade 1/3. Pelatihan 50 epoch dan optimasi latensi CPU masih rencana, belum ada hasil atau klaim novelty. Reproduksi CAD-ViT dan file historis tetap terpisah.
+
 ## Mulai membaca dan bekerja
 
 | Tujuan | Buka |
