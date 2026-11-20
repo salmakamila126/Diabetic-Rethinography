@@ -8,7 +8,24 @@ Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak 
 2. [02 — ConvNeXt B0–B4](notebooks/02_ConvNeXt_B0_B4_Validation.ipynb): studi validasi dan visualisasi confusion matrix/learning curves 10 run.
 3. [03 — ConvNeXt E5 Integrated](notebooks/03_ConvNeXt_E5_APTOS2019.ipynb): APTOS2019 training, validation, dan one-time final test yang telah selesai.
 
-**Jenis notebook:** ketiga notebook baru berisi narasi Markdown serta sel kode *analisis dan visualisasi* yang dapat dijalankan. Kode training tetap ada pada modul Python dan notebook historis; notebook ini **bukan** reproduksi training penuh dalam Colab dari nol. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah.
+**Jenis notebook:** ketiga notebook utama kini menggabungkan narasi ilmiah, pemeriksaan provenance, analisis artefak, contoh preprocessing nyata saat data berizin tersedia, dan sel preflight/smoke/training yang memanggil modul Python asli dengan sakelar eksplisit. Semua sakelar aksi dimatikan saat dibuka; notebook tidak otomatis melakukan training atau final-test inference. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah. [Audit status dan keterbatasan reproduksibilitas](docs/RESEARCH_CONSOLIDATION_AUDIT.md) menjelaskan perbedaan antara source yang tersedia dan hasil historis.
+
+| Studi | Pertanyaan | Hasil validasi terbaik yang tersedia | Final test | Status eksekusi dari Git |
+| --- | --- | --- | --- | --- |
+| 01 CAD-ViT | Sejauh mana implementasi kandidat mengikuti paper? | Balanced APTOS macro-F1 0,661421 (epoch 24); DDR recovery 0,653069 (epoch 69) | Agregat APTOS/DDR tersedia; [DDR final-test JSON](results/DDR/full_oversampling_fp32_math_mb8_80epochs/final_test_summary.json) | Kandidat dapat dijalankan dengan manifest, gambar, dan checkpoint/snapshot eksternal; riwayat V1/V2 tetap terpisah. |
+| 02 ConvNeXt B0–B4 | Bagaimana intervensi training konvensional memengaruhi validasi? | APTOS B4-R 0,707897; DDR B1 0,652146 | **Tidak ada klaim final test B0–B4** | B0–B2 punya runner tracked; B3/B4 source historis eksternal. |
+| 03 ConvNeXt E5 | Apakah auxiliary ordinal dan delayed weighting layak diuji bersama? | APTOS integrated 0,705791 (epoch 16); DDR masih **TRAINING_IN_PROGRESS** menurut operator | [APTOS one-time final test](results/APTOS2019/e5_integrated/test_summary.json): macro-F1 0,640456; DDR **FINAL_TEST_NOT_RUN** | Empat arm terimplementasi; hanya APTOS integrated memiliki hasil selesai dalam Git. |
+
+```mermaid
+flowchart LR
+    A[Manifest beku dan source berhash] --> B[Preflight dataset dan snapshot]
+    B --> C[Training train-only, output eksternal]
+    C --> D[Validasi tiap epoch, pilih checkpoint dengan macro-F1]
+    D --> E[Final test sekali setelah protokol terkunci]
+    E --> F[JSON, matriks, figure dan audit]
+```
+
+Mulai dari [petunjuk tiga notebook](notebooks/README.md). Pada Colab atau HPC, atur `DR_RESEARCH_ROOT`, `DR_ARTIFACT_ROOT`, dan `DR_OUTPUT_ROOT` ke lokasi yang benar; sediakan data dan snapshot resmi secara berizin di luar Git. Dependensi training perlu disesuaikan dengan environment sumber dan diverifikasi versinya. Perangkat/library yang berbeda dapat mengubah hasil numerik, sehingga notebook tidak menjanjikan kesetaraan bitwise lintas mesin.
 
 
 Reproduksi parsial yang dipandu paper [CAD-ViT (2025)](https://doi.org/10.1109/ACCESS.2025.3572455) disajikan dalam [ikhtisar riset utama](CAD_ViT.ipynb). Tiga catatan eksperimen di bawah memuat tabel training, matriks, interpretasi, dan provenance; notebook utama merangkum enam hasil final test tanpa sel kode. [Notebook asli 105 sel](reproduction/archive/CAD_ViT_original_105_cells.ipynb) mempertahankan seluruh implementasi V1/V2, output, attachment, dan penomoran historis. Mulai kolaborasi dari [panduan kolaborator](docs/COLLABORATOR_GUIDE.md). EDA historis pada arsip §2.2 belum dapat ditautkan pasti ke manifest training V2; grafik APTOS lokal arsip §2.3 memakai pasangan label–gambar yang diperiksa terpisah.
