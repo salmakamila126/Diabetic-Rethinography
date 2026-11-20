@@ -8,6 +8,8 @@ Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak 
 2. [02 — ConvNeXt B0–B4](notebooks/02_ConvNeXt_B0_B4_Validation.ipynb): studi validasi dan visualisasi confusion matrix/learning curves 10 run.
 3. [03 — ConvNeXt E5 Integrated](notebooks/03_ConvNeXt_E5_APTOS2019.ipynb): APTOS2019 training, validation, dan one-time final test yang telah selesai.
 
+Tindak lanjut Studi 03: [notebook E6 boundary-aware](notebooks/03_ConvNeXt_E6_Boundary_Aware.ipynb) dan [protokol implementasi](novelty_integrated/e6/README.md). E6 baru memiliki source dan pengujian CPU lokal; cache HPC, benchmark A100, training, validasi, dan final test **belum dijalankan**. Hasil E5 dan B0–B4 tetap sebagai bukti historis terpisah.
+
 **Jenis notebook:** ketiga notebook utama kini menggabungkan narasi ilmiah, pemeriksaan provenance, analisis artefak, contoh preprocessing nyata saat data berizin tersedia, dan sel preflight/smoke/training yang memanggil modul Python asli dengan sakelar eksplisit. Semua sakelar aksi dimatikan saat dibuka; notebook tidak otomatis melakukan training atau final-test inference. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah. [Audit status dan keterbatasan reproduksibilitas](docs/RESEARCH_CONSOLIDATION_AUDIT.md) menjelaskan perbedaan antara source yang tersedia dan hasil historis.
 
 | Studi | Pertanyaan | Hasil validasi terbaik yang tersedia | Final test | Status eksekusi dari Git |

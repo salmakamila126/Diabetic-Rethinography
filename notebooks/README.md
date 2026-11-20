@@ -6,6 +6,8 @@
 | 02 | [ConvNeXt B0–B4](02_ConvNeXt_B0_B4_Validation.ipynb) | Sepuluh run 20 epoch, 200 catatan epoch, kurva dan matriks validasi. B3/B4 historical runner berada di luar Git. |
 | 03 | [ConvNeXt E5](03_ConvNeXt_E5_APTOS2019.ipynb) | Empat arm terimplementasi; APTOS integrated 20 epoch dan satu final test selesai. DDR integrated masih training di HPC; final test belum dijalankan. |
 
+**Tindak lanjut Studi 03:** [E6 boundary-aware ConvNeXt-Tiny](03_ConvNeXt_E6_Boundary_Aware.ipynb) mendokumentasikan objective LDAM-DRW, supervisi ordinal, batas grade berdekatan, cache RGB train, dan gerbang benchmark. Status E6 **IMPLEMENTED, NOT RUN**; seluruh kontrol eksekusi notebook nonaktif secara default. [Protokol dan perintah HPC](../novelty_integrated/e6/README.md) memisahkan cache, preflight, smoke, benchmark, dan training dari E5.
+
 Ketiga notebook memuat Markdown ilmiah dan kode Python yang membaca artefak terkomit, memeriksa dependensi/provenance, serta menunjukkan jalur source asli untuk preflight, smoke, dan training. `RUN_PREFLIGHT`, `RUN_SMOKE`, dan `RUN_TRAINING` selalu `False` saat notebook dibuka. Tidak ada sel yang menjalankan final-test inference. Figure terkomit tampil langsung di GitHub tanpa kernel. Kode yang memerlukan dataset, manifest, snapshot model, atau checkpoint luar repository menampilkan `SKIPPED_MISSING_DATA` sampai input asli tersedia.
 
 ## Persiapan Colab atau HPC
