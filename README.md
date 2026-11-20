@@ -8,7 +8,7 @@ Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak 
 2. [02 — ConvNeXt B0–B4](notebooks/02_ConvNeXt_B0_B4_Validation.ipynb): studi validasi dan visualisasi confusion matrix/learning curves 10 run.
 3. [03 — ConvNeXt E5 Integrated](notebooks/03_ConvNeXt_E5_APTOS2019.ipynb): APTOS2019 training, validation, dan one-time final test yang telah selesai.
 
-Tindak lanjut Studi 03: [notebook E6 boundary-aware](notebooks/03_ConvNeXt_E6_Boundary_Aware.ipynb) dan [protokol implementasi](novelty_integrated/e6/README.md). E6 baru memiliki source dan pengujian CPU lokal; cache HPC, benchmark A100, training, validasi, dan final test **belum dijalankan**. Hasil E5 dan B0–B4 tetap sebagai bukti historis terpisah.
+Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) memuat perbandingan checkpoint terpilih, kurva lengkap, matriks kebingungan, metrik per grade, dan audit provenance. [Notebook E6 boundary-aware](notebooks/03_ConvNeXt_E6_Boundary_Aware.ipynb) dan [protokol implementasi](novelty_integrated/e6/README.md) mendokumentasikan rancangan eksperimen sebelum hasil HPC tersedia.
 
 **Jenis notebook:** ketiga notebook utama kini menggabungkan narasi ilmiah, pemeriksaan provenance, analisis artefak, contoh preprocessing nyata saat data berizin tersedia, dan sel preflight/smoke/training yang memanggil modul Python asli dengan sakelar eksplisit. Semua sakelar aksi dimatikan saat dibuka; notebook tidak otomatis melakukan training atau final-test inference. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah. [Audit status dan keterbatasan reproduksibilitas](docs/RESEARCH_CONSOLIDATION_AUDIT.md) menjelaskan perbedaan antara source yang tersedia dan hasil historis.
 
@@ -16,7 +16,8 @@ Tindak lanjut Studi 03: [notebook E6 boundary-aware](notebooks/03_ConvNeXt_E6_Bo
 | --- | --- | --- | --- | --- |
 | 01 CAD-ViT | Sejauh mana implementasi kandidat mengikuti paper? | Balanced APTOS macro-F1 0,661421 (epoch 24); DDR recovery 0,653069 (epoch 69) | Agregat APTOS/DDR tersedia; [DDR final-test JSON](results/DDR/full_oversampling_fp32_math_mb8_80epochs/final_test_summary.json) | Kandidat dapat dijalankan dengan manifest, gambar, dan checkpoint/snapshot eksternal; riwayat V1/V2 tetap terpisah. |
 | 02 ConvNeXt B0–B4 | Bagaimana intervensi training konvensional memengaruhi validasi? | APTOS B4-R 0,707897; DDR B1 0,652146 | **Tidak ada klaim final test B0–B4** | B0–B2 punya runner tracked; B3/B4 source historis eksternal. |
-| 03 ConvNeXt E5 | Apakah auxiliary ordinal dan delayed weighting layak diuji bersama? | APTOS integrated 0,705791 (epoch 16); DDR masih **TRAINING_IN_PROGRESS** menurut operator | [APTOS one-time final test](results/APTOS2019/e5_integrated/test_summary.json): macro-F1 0,640456; DDR **FINAL_TEST_NOT_RUN** | Empat arm terimplementasi; hanya APTOS integrated memiliki hasil selesai dalam Git. |
+| 03 ConvNeXt E5 | Apakah auxiliary ordinal dan delayed weighting layak diuji bersama? | APTOS 0,705791 (epoch 16), DDR 0,653199 (epoch 18) | [APTOS one-time final test](results/APTOS2019/e5_integrated/test_summary.json), macro-F1 0,640456 | Kedua run integrated tercakup dalam [audit validasi E5–E6](docs/E5_E6_VALIDATION.md). |
+| 03 ConvNeXt E6 | Bagaimana LDAM, delayed weighting dan penalti batas grade berdekatan mengubah kesalahan? | APTOS 0,679204 (epoch 15), DDR 0,662455 (epoch 12) | Ringkasan training mencatat final test belum diakses saat run selesai | [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) mencakup kedua run E6. |
 
 ```mermaid
 flowchart LR
@@ -132,7 +133,7 @@ Jika uji integritas ZIP gagal, jangan gunakan hasilnya. Periksa nama folder, ber
 unzip DDR-dataset.zip -d extracted
 ~~~
 
-Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya; hash lokal saja tidak membuktikan keaslian unduhan. Server yang diaudit sudah memiliki <code>/mnt/home/probation-03/Kel_13/datasets/DDR/DDR-dataset/DR_grading/</code>; jangan menggabungkan atau mengekstrak ulang arsip di sana. Cell preflight hanya menginventarisasi; fungsi <code>ddr_records()</code> membaca anotasi dan memvalidasi pasangan gambar saat manifest diminta.
+Bandingkan checksum bagian dengan checksum resmi apabila penerbit menyediakannya; hash lokal saja tidak membuktikan keaslian unduhan. Server yang diaudit sudah memiliki <code>DDR/DDR-dataset/DR_grading/</code> di bawah root dataset yang dikonfigurasi; jangan menggabungkan atau mengekstrak ulang arsip di sana. Cell preflight hanya menginventarisasi; fungsi <code>ddr_records()</code> membaca anotasi dan memvalidasi pasangan gambar saat manifest diminta.
 
 ## Status implementasi dan final test historis V1
 
