@@ -1,5 +1,8 @@
 # E5: exploratory integrated ConvNeXt-Tiny pilot
 
+> **20 Nov 2026 — Status terbaru E5 APTOS2019:** training 20 epoch selesai; validation macro-F1 0.705791, best epoch 16; one-time frozen final test 366 images selesai dengan macro-F1 0.640456, accuracy 0.825137, QWK 0.891194. Bukti: [E5 APTOS results](../../results/APTOS2019/e5_integrated/README.md), [notebook analisis](../../notebooks/03_ConvNeXt_E5_APTOS2019.ipynb). DDR E5 final belum terdokumentasi. Kalimat lama di bawah yang menyatakan 'belum training' adalah snapshot perencanaan sebelum eksperimen, bukan status terkini.
+
+
 **Status:** implementation and synthetic CPU checks only. No APTOS2019 or DDR
 E5 training, validation inference, or final-test access has been run here.
 `integrated` is the first planned pilot; `control`, `ordinal`, and `deferred`

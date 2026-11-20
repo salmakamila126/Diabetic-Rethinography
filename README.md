@@ -1,5 +1,16 @@
 # Reproduksi CAD-ViT: Coordinate Attention-Enhanced Vision Transformer With Dilated Feature Fusion for Diabetic Retinopathy Staging
 
+## Mulai di sini — tiga penelitian (branch `salma`)
+
+Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak tercampur. **Buka [indeks notebook](notebooks/README.md) terlebih dahulu**.
+
+1. [01 — Reproduksi CAD-ViT](notebooks/01_CAD_ViT_Reproduction.ipynb): paper fidelity, V1, V2, balanced/recovery, dan keterbatasan reproduksi parsial.
+2. [02 — ConvNeXt B0–B4](notebooks/02_ConvNeXt_B0_B4_Validation.ipynb): studi validasi dan visualisasi confusion matrix/learning curves 10 run.
+3. [03 — ConvNeXt E5 Integrated](notebooks/03_ConvNeXt_E5_APTOS2019.ipynb): APTOS2019 training, validation, dan one-time final test yang telah selesai.
+
+**Jenis notebook:** ketiga notebook baru berisi narasi Markdown serta sel kode *analisis dan visualisasi* yang dapat dijalankan. Kode training tetap ada pada modul Python dan notebook historis; notebook ini **bukan** reproduksi training penuh dalam Colab dari nol. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah.
+
+
 Reproduksi parsial yang dipandu paper [CAD-ViT (2025)](https://doi.org/10.1109/ACCESS.2025.3572455) disajikan dalam [ikhtisar riset utama](CAD_ViT.ipynb). Tiga catatan eksperimen di bawah memuat tabel training, matriks, interpretasi, dan provenance; notebook utama merangkum enam hasil final test tanpa sel kode. [Notebook asli 105 sel](reproduction/archive/CAD_ViT_original_105_cells.ipynb) mempertahankan seluruh implementasi V1/V2, output, attachment, dan penomoran historis. Mulai kolaborasi dari [panduan kolaborator](docs/COLLABORATOR_GUIDE.md). EDA historis pada arsip §2.2 belum dapat ditautkan pasti ke manifest training V2; grafik APTOS lokal arsip §2.3 memakai pasangan label–gambar yang diperiksa terpisah.
 
 Rujukan ke sel kode atau nomor bagian lama dalam catatan di bawah menunjuk ke **notebook arsip**. Laporan utama memakai struktur ringkas baru; jangan menjalankan ulang evaluator final test dari contoh historis.
