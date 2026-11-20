@@ -1,0 +1,121 @@
+{
+  "arm": "integrated",
+  "checkpoint_epoch": 16,
+  "checkpoint_sha256": "c44a88429f070f1eddc516ca9ece029c9f3a9d51b5624905bfcba20b5f6e45b4",
+  "dataset": "APTOS2019",
+  "metrics": {
+    "accuracy": 0.825136612021858,
+    "confusion_matrix": [
+      [
+        176,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        25,
+        11,
+        0,
+        1
+      ],
+      [
+        0,
+        6,
+        83,
+        6,
+        5
+      ],
+      [
+        0,
+        0,
+        10,
+        4,
+        5
+      ],
+      [
+        0,
+        1,
+        11,
+        3,
+        14
+      ]
+    ],
+    "correct": 302,
+    "grade_mae": 0.22950819672131148,
+    "high_confidence_threshold": 0.9,
+    "high_confidence_wrong": 29,
+    "high_confidence_wrong_fraction_of_wrong": 0.453125,
+    "high_confidence_wrong_rate_all": 0.07923497267759563,
+    "macro_f1": 0.6404563230418223,
+    "mean_overgrade_magnitude": 1.21875,
+    "mean_undergrade_magnitude": 1.40625,
+    "overgraded": 32,
+    "per_grade": [
+      {
+        "correct": 176,
+        "f1": 0.9859943977591036,
+        "grade": 0,
+        "mean_absolute_error": 0.022222222222222223,
+        "overgraded": 4,
+        "precision": 0.9943502824858758,
+        "recall": 0.9777777777777777,
+        "support": 180,
+        "undergraded": 0
+      },
+      {
+        "correct": 25,
+        "f1": 0.6756756756756757,
+        "grade": 1,
+        "mean_absolute_error": 0.39473684210526316,
+        "overgraded": 12,
+        "precision": 0.6944444444444444,
+        "recall": 0.6578947368421053,
+        "support": 38,
+        "undergraded": 1
+      },
+      {
+        "correct": 83,
+        "f1": 0.772093023255814,
+        "grade": 2,
+        "mean_absolute_error": 0.22,
+        "overgraded": 11,
+        "precision": 0.7217391304347827,
+        "recall": 0.83,
+        "support": 100,
+        "undergraded": 6
+      },
+      {
+        "correct": 4,
+        "f1": 0.25,
+        "grade": 3,
+        "mean_absolute_error": 0.7894736842105263,
+        "overgraded": 5,
+        "precision": 0.3076923076923077,
+        "recall": 0.21052631578947367,
+        "support": 19,
+        "undergraded": 10
+      },
+      {
+        "correct": 14,
+        "f1": 0.5185185185185185,
+        "grade": 4,
+        "mean_absolute_error": 0.9655172413793104,
+        "overgraded": 0,
+        "precision": 0.56,
+        "recall": 0.4827586206896552,
+        "support": 29,
+        "undergraded": 15
+      }
+    ],
+    "quadratic_weighted_kappa": 0.8911943813492008,
+    "undergraded": 32,
+    "validation_loss": 0.6369364209513847,
+    "weighted_f1": 0.8200847175817835,
+    "wrong": 64
+  },
+  "model": "ConvNeXt-Tiny",
+  "status": "FINAL_TEST_COMPLETE",
+  "test_samples": 366
+}
