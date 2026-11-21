@@ -11,12 +11,13 @@ from importlib.metadata import PackageNotFoundError, version
 
 from novelty import foundation_adaptation as fa
 from novelty import preof_phase1 as phase
-from . import backends, models, registry
+from . import backends, models, pruning, registry
 from .__main__ import _parser as run_parser, _plan
 
 GIB = 1024**3
 PRIORITY = ("E5_APTOS2019", "E6_APTOS2019", "E7_APTOS2019", "E5_DDR", "E6_DDR")
-STAGES = ("audit", "prepare", "validate", "measure", "recover", "measure-recovered")
+VALIDATION_STAGES = ("validate", "validate-recovered")
+STAGES = ("audit", "prepare", "validate", "measure", "recover", "validate-recovered", "measure-recovered")
 
 
 def inventory():
@@ -40,6 +41,7 @@ def checkpoint_relative(entry):
 
 def receipt(entry):
     return {**entry.describe(), "checkpoint_relative_to_root": checkpoint_relative(entry),
+            "recovery_implemented": bool(entry.evidence) and entry.arm in ("E5", "E6", "E7"),
             "scope": "frozen validation only",
             "validation_images": entry.configuration["manifest"]["counts"]["val"] if entry.evidence else None}
 
@@ -62,7 +64,9 @@ def _parser():
     parser.add_argument("--min-ram-gib", type=int, default=6, help="Available host/cgroup RAM floor per job")
     parser.add_argument("--sample-count", type=int, help="Omit for full frozen validation")
     parser.add_argument("--backend", nargs="+", choices=backends.BACKENDS, default=list(backends.BACKENDS))
-    parser.add_argument("--recovery-epochs", type=int, choices=(1, 2, 3))
+    parser.add_argument("--recovery-epochs", type=int, choices=(3,))
+    parser.add_argument("--recovery-ratio", type=float, choices=(0.0, *pruning.RATIOS),
+                        help="Recover only this arm. Omit to process all four sequentially.")
     parser.add_argument("--recovery-micro-batch", type=int, choices=(1, 4, 8, 16, 32), default=4)
     parser.add_argument("--recovery-device", choices=("cpu", "cuda:0"), default="cpu")
     parser.add_argument("--authorize-recovery", action="store_true")
@@ -226,13 +230,16 @@ def _resource_guard(args, campaign):
         raise ValueError("Measurement requires an exclusive CPU allocation, confirmed explicitly")
     cpus = _parse_cpus(args.cpus)
     affinity = _affinity()
-    if args.stage == "validate":
+    if args.stage in VALIDATION_STAGES:
         if not args.shared_cpu or args.confirm_isolated_cpu:
             raise ValueError("Use --shared-cpu without --confirm-isolated-cpu for untimed validation")
         if args.threads != 1 or len(cpus) != 1 or cpus != affinity:
             raise ValueError("Start validation with taskset -c on one allowed logical CPU and use --threads 1")
     elif args.shared_cpu:
         raise ValueError("--shared-cpu applies only to untimed validation")
+    if args.stage == "recover" and args.recovery_device == "cpu" and (
+            args.threads not in (1, 2) or len(cpus) != args.threads or cpus != affinity):
+        raise ValueError("Start CPU recovery with taskset on one or two approved CPUs and match --threads to the CPU count")
     if args.threads < 1 or len(cpus) < args.threads or not set(cpus) <= set(affinity):
         raise ValueError("Requested threads and CPUs exceed the process allocation")
     quota = _cpu_quota()
@@ -242,7 +249,7 @@ def _resource_guard(args, campaign):
         raise ValueError("Recovery settings apply only to the recover stage")
     ram = _available_ram()
     # Resource floors are conservative policy settings, not measured consumption.
-    additional_disk = {"prepare": 6, "recover": 3}.get(args.stage, 1)
+    additional_disk = {"prepare": 6, "recover": 8 if args.recovery_ratio is None else 3}.get(args.stage, 1)
     if args.min_ram_gib < 1 or ram is None or ram < args.min_ram_gib * GIB:
         raise ValueError("Insufficient available RAM or unreadable RAM limit")
     if args.min_free_gib < 1 or _disk(campaign) < (args.min_free_gib + additional_disk) * GIB:
@@ -283,17 +290,20 @@ def main(argv=None):
         if report["status"] != "AUDIT_PASS":
             raise SystemExit(2)
         return
-    if args.stage == "recover" and (entry.arm not in registry.INTEGRATED or not args.authorize_recovery
-                                    or not args.recovery_epochs):
-        raise ValueError("Recovery requires explicit authorization, epochs and an E5/E6 job")
+    if args.stage == "recover" and (entry.arm not in ("E5", "E6", "E7") or not args.authorize_recovery
+                                    or not args.recovery_epochs or not args.confirm_ddr_e7_safe):
+        raise ValueError("Recovery requires an eligible job, exactly three epochs, authorization and E7 DDR safety confirmation")
     if args.stage != "recover" and (args.authorize_recovery or args.recovery_epochs or args.gpu_uuid
-                                    or args.confirm_ddr_e7_safe or args.recovery_device != "cpu"):
+                                    or args.confirm_ddr_e7_safe or args.recovery_device != "cpu"
+                                    or args.recovery_ratio is not None):
         raise ValueError("Recovery flags cannot be used in another stage")
+    if args.stage == "recover" and args.recovery_device == "cpu" and args.gpu_uuid:
+        raise ValueError("CPU recovery cannot request a GPU UUID")
     root, campaign, checkpoint, snapshot, manifest = _arguments(args, entry)
     if not entry.evidence:
         raise ValueError(f"{args.job}: {entry.status}")
-    if args.stage == "validate" and not (campaign / args.job / "protocol.json").is_file():
-        raise FileNotFoundError("Validation requires an existing campaign/job protocol.json from prepare")
+    if args.stage in (*VALIDATION_STAGES, "recover") and not (campaign / args.job / "protocol.json").is_file():
+        raise FileNotFoundError("This stage requires an existing campaign/job protocol.json from prepare")
     cpus = _resource_guard(args, campaign)
     # Guard paths against datasets, model snapshots, checkpoint directories and Git worktrees.
     fa._safe_out(campaign / args.job, [checkpoint.parent, snapshot, root / "datasets", root / "cad_vit_runs"])
@@ -333,14 +343,17 @@ def main(argv=None):
             if args.recovery_device == "cuda:0":
                 cli.append("--acknowledge-shared-gpu")
         run = run_parser().parse_args(cli)
-        plan = _plan(run, entry)
+        plan = _plan(run, entry, staged=True)
+        run.recovery_ratio = args.recovery_ratio
         campaign.mkdir(parents=True, exist_ok=True)
         from .workflow import execute
 
         allocation = {"id": args.allocation_id, "cpus": cpus, "threads": args.threads,
                       "exclusive_cpu_confirmed": args.confirm_isolated_cpu}
-        if args.stage == "validate":
+        if args.stage in VALIDATION_STAGES:
             allocation["cpu_mode"] = "shared"
+        if args.stage == "recover":
+            allocation["gpu_uuid"] = args.gpu_uuid
         return execute(args.stage, run, entry, plan, allocation)
 
 

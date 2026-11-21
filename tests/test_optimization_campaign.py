@@ -90,12 +90,28 @@ class CampaignTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "--threads 1"):
                 hpc._resource_guard(parser.parse_args(["validate", *options, "--shared-cpu", "--threads", "2"]), directory)
             self.assertEqual(hpc._resource_guard(args, directory), [2])
+            post = parser.parse_args(["validate-recovered", *options, "--shared-cpu"])
+            self.assertEqual(hpc._resource_guard(post, directory), [2])
             for stage in ("measure", "measure-recovered"):
                 with self.assertRaisesRegex(ValueError, "exclusive CPU allocation"):
                     hpc._resource_guard(parser.parse_args([stage, *options, "--shared-cpu"]), directory)
                 with self.assertRaisesRegex(ValueError, "applies only to untimed validation"):
                     hpc._resource_guard(parser.parse_args([stage, *options, "--shared-cpu", "--confirm-isolated-cpu"]), directory)
-            pin.assert_called_once_with(0, [2])
+            self.assertEqual(pin.call_count, 2)
+
+    def test_gpu_recovery_refuses_occupied_gpu_and_cpu_hides_cuda(self):
+        cpu = hpc._parser().parse_args(["recover", "--job", "E7_APTOS2019", "--recovery-epochs", "3"])
+        gpu = hpc._parser().parse_args(["recover", "--job", "E7_APTOS2019", "--recovery-epochs", "3",
+                                       "--recovery-device", "cuda:0", "--gpu-uuid", "GPU-synthetic",
+                                       "--confirm-ddr-e7-safe"])
+        with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0"}), patch.object(
+                subprocess, "check_output", side_effect=["16000", "1234"]) as smi:
+            with self.assertRaisesRegex(ValueError, "GPU is in use"):
+                hpc._gpu_guard(gpu)
+            self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "0")
+            hpc._gpu_guard(cpu)
+            self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "")
+            self.assertEqual(smi.call_count, 2)
 
     def test_notebook_default_dispatches_no_process(self):
         from IPython import display
@@ -178,25 +194,69 @@ class CampaignTests(unittest.TestCase):
     def test_stage_reuses_artifacts_and_reports_paired_recovery(self):
         with self._fixture() as (synthetic, arguments, output, checkpoint):
             base = cli._parser().parse_args(arguments)
-            recovered = cli._parser().parse_args(arguments + ["--authorize-recovery", "--recovery-epochs", "1", "--prune", "0.3"])
+            recovered = cli._parser().parse_args(arguments + ["--authorize-recovery", "--recovery-epochs", "3", "--prune", "0.3"])
             allocation = {"id": "synthetic", "cpus": [0], "threads": 1, "exclusive_cpu_confirmed": True}
-            workflow.execute("prepare", base, synthetic, cli._plan(base, synthetic), allocation)
+            plan, recover_plan = cli._plan(base, synthetic), cli._plan(recovered, synthetic)
+            source = workflow._source()
+            with patch.object(workflow, "_source", return_value={**source, **workflow._PRE_VALIDATION_SOURCE}):
+                workflow.execute("prepare", base, synthetic, plan, allocation)
+            with self.assertRaisesRegex(ValueError, "passing unrecovered validate"):
+                workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
             shared = {**allocation, "exclusive_cpu_confirmed": False, "cpu_mode": "shared"}
-            with patch.object(benchmark, "time_backend") as timer:
-                self.assertEqual(workflow.execute("validate", base, synthetic, cli._plan(base, synthetic), shared), 0)
+            with patch.object(benchmark, "time_backend") as timer, patch.object(
+                    workflow, "_source", return_value={**source, **workflow._PRE_RECOVERY_SOURCE}):
+                self.assertEqual(workflow.execute("validate", base, synthetic, plan, shared), 0)
                 timer.assert_not_called()
-            self.assertEqual(workflow.read(output / "validation/report.json")["outcome"], "PASS")
+            native = output / "validation/report.json"
+            old_hashes = {p: phase.sha256(p) for p in [checkpoint, native, native.with_name("summary.csv"),
+                         output / "protocol.json", *(output / "prepared").glob("*/*")]}
+            self.assertEqual(workflow.read(native)["outcome"], "PASS")
             self.assertFalse((output / "measurement").exists())
-            with self.assertRaisesRegex(ValueError, "unrecovered measurement"):
-                workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
+
+            def train(model, entry, rows, processor, *, epochs, micro_batch, device, resume, save_epoch):
+                self.assertEqual(epochs, 3)
+                self.assertEqual(set(rows), {"train"})
+                self.assertEqual(device, "cpu")
+                history = [] if resume is None else resume["history"]
+                for epoch in range(len(history) + 1, epochs + 1):
+                    history.append({"recovery_epoch": epoch})
+                    save_epoch({"model": model.state_dict(), "history": history})
+                    if trainer.call_count == 1:
+                        raise InterruptedError("synthetic interruption")
+                return {"objective": "synthetic", "history": history}
+
+            recovered.recovery_ratio = 0.3
+            with patch.object(recovery, "recover", side_effect=train) as trainer, patch.object(
+                    benchmark, "time_backend") as timer:
+                with self.assertRaises(InterruptedError):
+                    workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                self.assertFalse((output / "recovered/pruned_30/prepared.json").exists())
+                workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                self.assertIsNotNone(trainer.call_args.kwargs["resume"])
+                with self.assertRaisesRegex(ValueError, "arm incomplete"):
+                    workflow.execute("validate-recovered", base, synthetic, plan, shared)
+                recovered.recovery_ratio = None
+                workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                self.assertEqual(trainer.call_count, 5)
+                self.assertEqual(workflow.execute("validate-recovered", base, synthetic, plan, shared), 0)
+                self.assertEqual(workflow.execute("validate", base, synthetic, plan, shared), 0)
+                timer.assert_not_called()
+            self.assertFalse((output / "measurement").exists())
+            report = workflow.read(output / "validation-recovered/report.json")
+            self.assertFalse(report["timing_performed"])
+            self.assertEqual(report["unrecovered_validation_report_sha256"], old_hashes[native])
+            self.assertEqual(report["ordered_preprocessed_tensor_sha256"],
+                             workflow.read(native)["ordered_preprocessed_tensor_sha256"])
+            expected_order = sorted((v for v in report["variants"] if v["ratio"]), key=lambda v: (
+                -v["backends"]["eager"]["quality"]["macro_f1"], v["backends"]["eager"]["quality"]["grade_mae"], v["ratio"]))
+            self.assertEqual(report["comparison"]["pruned_ratio_ranking"], [v["ratio"] for v in expected_order])
+            self.assertEqual(report["comparison"]["selected_pruned_ratio"], expected_order[0]["ratio"])
+            self.assertTrue(all(phase.sha256(path) == digest for path, digest in old_hashes.items()))
+
             with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
-                workflow.execute("prepare", base, synthetic, cli._plan(base, synthetic), allocation)
-                workflow.execute("measure", base, synthetic, cli._plan(base, synthetic), allocation)
-            with patch.object(recovery, "recover", return_value={"objective": "synthetic"}) as trainer:
-                workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
-                self.assertEqual(trainer.call_count, 4)
-            with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
-                workflow.execute("measure-recovered", base, synthetic, cli._plan(base, synthetic), allocation)
+                workflow.execute("prepare", base, synthetic, plan, allocation)
+                workflow.execute("measure", base, synthetic, plan, allocation)
+                workflow.execute("measure-recovered", base, synthetic, plan, allocation)
             raw = workflow.read(output / "measurement/report.json")
             post = workflow.read(output / "post-recovery/report.json")
             self.assertEqual(raw["allocation"], allocation)
@@ -205,7 +265,7 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(len(raw["variants"]), 4)
             self.assertEqual(len(post["variants"]), 8)
             self.assertEqual(raw["plan"]["prune"], [0.1, 0.3, 0.5])
-            self.assertEqual(post["recovery_policy"]["epochs"], 1)
+            self.assertEqual(post["recovery_policy"]["epochs"], 3)
             self.assertTrue(all(backend["status"] == "VALIDATED" for variant in post["variants"]
                                 for backend in variant["backends"].values()))
             self.assertIn("delta_vs_pruned_before_recovery", post["variants"][-1])

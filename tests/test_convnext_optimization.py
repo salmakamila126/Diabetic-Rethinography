@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import random
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -266,6 +267,77 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(e6.call_args.kwargs["epoch"], entry.best["epoch"])
         self.assertEqual(batches.call_args.args[-1], entry.best["epoch"] + 1)
         self.assertEqual(info["history"][0]["train"]["adjacent_loss"], 0.0)
+
+    def test_e7_recovery_keeps_multiview_collation_native_loss_and_gate(self):
+        entry = self.entries["APTOS2019", "E7"]
+        configuration = {**entry.configuration, "train_counts": [1] * 5}
+        entry = registry.Experiment(entry.dataset, entry.arm, entry.family, entry.status, entry.evidence_path,
+                                    {**entry.evidence, "configuration": configuration})
+        model = models.GlobalLocalCategorical(models.GlobalLocalModel(Backbone(), [1] * 5))
+        with tempfile.TemporaryDirectory() as temporary:
+            image = Path(temporary) / "sample.png"
+            Image.new("RGB", (31, 35), (100, 50, 25)).save(image)
+            rows = [{**row, "split": "train", "path": str(image), "sha256": phase.sha256(image)} for row in val_rows()]
+
+            def native(multiview, optimizer, ema, batches, **protocol):
+                self.assertIs(multiview, model.model)
+                self.assertIn(id(multiview.gate.weight), [id(p) for p in optimizer.param_groups[1]["params"]])
+                self.assertIsNone(ema)
+                self.assertEqual(protocol["epoch"], entry.best["epoch"])
+                self.assertEqual(protocol["accumulation"], 8)
+                prepared = list(batches)
+                self.assertEqual(tuple(prepared[0][0].shape), (4, 3, 384, 384))
+                self.assertEqual(tuple(prepared[0][1].shape), (4, 2, 3, 224, 224))
+                self.assertEqual(sum(len(batch[2]) for batch in prepared), 5)
+                return {"loss": 1.0}
+
+            with patch.object(recovery.e7runner, "_train_batches", side_effect=native) as runner, patch.object(
+                    recovery.e5runner, "_train_batches") as e5, patch.object(recovery.e6runner, "_train_batches") as e6:
+                result = recovery.recover(model, entry, {"train": rows, "val": [{"split": "test"}]},
+                                          FakeProcessor(), epochs=3, micro_batch=4)
+                self.assertEqual(runner.call_count, 3)
+                e5.assert_not_called()
+                e6.assert_not_called()
+            self.assertEqual(result["export_weights"], "raw")
+            self.assertEqual(result["history"][-1]["augmentation_epoch"], entry.best["epoch"] + 3)
+            with self.assertRaisesRegex(ValueError, "original frozen training"):
+                recovery.recover(model, entry, {"train": [{**rows[0], "split": "test"}, *rows[1:]]},
+                                 FakeProcessor(), epochs=3, micro_batch=4)
+
+    def test_recovery_epoch_resume_restores_optimizer_and_rng(self):
+        entry = self.entries["APTOS2019", "E5"]
+        counts = entry.configuration["train_counts"]
+        model = models.CategoricalModel(Backbone(), E5Heads(768, counts, ordinal=True))
+        train = [{"label": grade, "split": "train"} for grade, count in enumerate(counts) for _ in range(count)]
+
+        def one_step(backbone, heads, optimizer, batches, **opts):
+            param = next(backbone.parameters())
+            signal = float(torch.rand(())) + float(np.random.random()) + random.random()
+            optimizer.zero_grad(set_to_none=True)
+            param.grad = torch.full_like(param, signal)
+            optimizer.step()
+            return {"loss": signal}
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(fa, "_epochs_batches", return_value=()), patch.object(
+                recovery.e5runner, "_train_batches", side_effect=one_step), contextlib.redirect_stdout(io.StringIO()):
+            path = Path(tmp) / "state.pt"
+
+            def interrupt(state):
+                fa._save_checkpoint(path, state)
+                raise InterruptedError
+
+            processor = FakeProcessor()
+            opts = {"epochs": 3, "micro_batch": 4}
+            reference, resumed = copy.deepcopy(model), copy.deepcopy(model)
+            full = recovery.recover(reference, entry, {"train": train}, processor, **opts)
+            with self.assertRaises(InterruptedError):
+                recovery.recover(resumed, entry, {"train": train}, processor, save_epoch=interrupt, **opts)
+            boundary = torch.load(path, map_location="cpu", weights_only=True)
+            self.assertTrue(boundary["optimizer"]["state"])
+            resumed_history = recovery.recover(resumed, entry, {"train": train}, processor, resume=boundary, **opts)
+        for key, tensor in reference.state_dict().items():
+            torch.testing.assert_close(tensor, resumed.state_dict()[key], rtol=0, atol=0)
+        self.assertEqual([r["train"] for r in full["history"]], [r["train"] for r in resumed_history["history"]])
 
     def test_cpu_smoke_synthetic_eager_torchscript_timing_serialization(self):
         fake = nn.Linear(6, 5).eval()

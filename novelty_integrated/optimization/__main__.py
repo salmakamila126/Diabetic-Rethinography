@@ -66,15 +66,16 @@ def _output(args):
     return fa._safe_out(args.output, protected)
 
 
-def _plan(args, entry):
+def _plan(args, entry, *, staged=False):
     import math
 
     if (args.threads < 1 or args.batch_size < 1 or args.warmup < 1 or args.repeats < 2
             or any(not math.isfinite(x) or x < 0 for x in (args.atol, args.rtol))):
         raise ValueError("Invalid CPU benchmarking configuration")
     if args.recovery_epochs:
-        if not args.authorize_recovery or not args.prune or entry.arm not in ("E5", "E6"):
-            raise ValueError("Recovery needs separate authorization, explicit ratios and an E5/E6 arm")
+        eligible = ("E5", "E6", "E7") if staged else ("E5", "E6")
+        if not args.authorize_recovery or not args.prune or entry.arm not in eligible:
+            raise ValueError("Recovery needs separate authorization, explicit ratios and an eligible arm")
         device = torch.device(args.recovery_device)
         if device.type not in ("cpu", "cuda") or (device.type == "cuda" and not args.acknowledge_shared_gpu):
             raise ValueError("CUDA recovery requires shared-GPU acknowledgement")

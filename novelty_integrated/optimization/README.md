@@ -38,7 +38,11 @@ Hugging Face V1 ranks rows of the first expansion Linear by L1 norm, removes `fl
 
 Each ratio starts from a new in-memory copy of the same parent. Forward checks, parameter counts and actual-call Conv2d/Linear MACs are recorded before timing. E7 MACs count all three views, while parameter counts count shared tensors once. FLOPs use two per counted MAC and exclude normalization, activation, pooling and miscellaneous operations. For replay, apply the recorded indices through `pruning.prune_hf(original, ratio, topology=...)` before strictly loading the reported derivative `inference_state_dict.pt` with `weights_only=True`. The narrower state dict cannot be loaded directly into the original topology.
 
-Recovery is separate and requires explicit authorization. It implements E5/E6 only by calling their distinct source batch trainers. It uses original train rows, B1 augmentation, fresh AdamW, original learning rates, weight decay and clipping, and effective batch 32. It freezes deferred class-weight activation at the selected parent epoch and advances augmentation seeds from that epoch. This is a new, fixed-duration recovery design, with the final recovery epoch selected without tuning on the measurement validation sequence. Record the optional 0% recovery control to distinguish recovery effects from pruning. B0–B4 and E7 recovery are unsupported. CPU is the default; a future CUDA recovery must have a separately approved allocation and pass the explicit acknowledgement gate. No inference timings include the recovery workload.
+The staged recovery design follows the independent 10%, 30%, and 50% sweeps and three recovery epochs in the [archived V2 and HF V1 notebook audit](../../docs/OPTIMIZATION_COMPATIBILITY.md#structured-pruning-details). Those notebooks select recovery epochs by validation macro-F1, the V2 sweep also evaluates test, and the HF V1 sweep disables class weights throughout. Here every arm exports epoch 3, and the same frozen validation subset compares the completed arms. Test data remain sealed. The added 0% control receives the same three epochs so the recovery effect can be compared with and without pruning.
+
+E5 uses its native categorical and ordinal objective. E6 uses its native LDAM, ordinal and adjacent-grade objective. E7 independently reuses its own `ViewCollator` and `_train_batches`, with EXIF/RGB decoding from verified training images, B1 augmentation before geometry, one 384px global view and two 224px local patches. Its optimizer includes the shared backbone, both heads and the gate. E7 starts from the archived selected raw or EMA weights. The verified APTOS2019 parent uses raw weights. When a verified parent uses EMA, recovery initializes a fresh shadow from the selected weights and exports the final shadow.
+
+All four arms start independently from their own verified prepared state. Recovery uses fresh AdamW, original learning rates, weight decay and clipping, effective batch 32, loss weighting fixed at the selected parent epoch, and augmentation epochs that continue from that epoch. Inputs are decoded uncached. Recovery does not load training caches, train on validation rows or use validation for early stopping. B0–B4 recovery remains outside this workflow.
 
 ## Future execution commands
 
@@ -80,10 +84,7 @@ python -m novelty_integrated.optimization run "${BASE[@]}" --execute \
 python -m novelty_integrated.optimization run "${BASE[@]}" --execute \
   --prune 0.1 0.3 0.5 --backend eager --output "$OUT/${DATASET}_${ARM}_pruning"
 
-# Phase C, only after separate authorization. The 0% arm is a recovery control.
-python -m novelty_integrated.optimization run "${BASE[@]}" --execute --authorize-recovery \
-  --prune 0 0.1 0.3 0.5 --recovery-epochs 3 --recovery-micro-batch 4 \
-  --backend eager --output "$OUT/${DATASET}_${ARM}_recovery"
+# For three-epoch recovery and the 0% control, see the staged HPC commands below.
 ```
 
 For B3, pass `--external-source-dir` for the copied `foundation_b3_parallel_runner.py` and `sampler.py`. For B4-Q/B4-R, supply the copied `b4_runner.py` and `b4_common.py`. The approved source SHA-256 receipts are printed by the registry. For B0–B4 benchmarking, omit recovery options. Optional backends require `onnx`, `onnxruntime` and/or `openvino` in the selected environment. The authentic model and processor require `transformers==4.57.3` and local pinned weights. A missing package is recorded explicitly. Each successful run writes `plan.json`, `report.json`, `summary.csv`, `comparison.svg` and per-variant export artifacts under a fresh external directory.
@@ -127,8 +128,9 @@ Request approved resources before launch. Set the shell variables below to the s
 | --- | ---: | ---: | --- | ---: |
 | Export and pruning preparation | 5 | 2 on disjoint allocated CPUs | 2 CPU threads per worker, ≥6 GiB available RAM per worker with ≥12 GiB at launch for two, plan 3 GiB added per pair. The launch guard reserves for two workers (6 GiB) plus a 5 GiB free shared reserve. | None |
 | Original and pruned timing | 5 | 1 | 4 isolated CPU threads, ≥6 GiB available RAM, 1 GiB extra plus reserve, CPU only | APTOS 35,136 per pair, DDR 120,192 per pair |
-| Recovery preparation | 4 eligible priority pairs, E5/E6 | 1 | Separate explicit approval. CPU default. GPU only with an allocated idle UUID, DDR E7 safety confirmed and ≥8 GiB free VRAM as a preflight guard | None |
-| Timing with recovered arms | 4 eligible priority pairs | 1 | Same isolated CPU policy, remeasure original and pruned controls in the same job | Twice the corresponding unrecovered counts |
+| Recovery | 5 eligible priority pairs, E5/E6 and completed E7 APTOS2019 | 1 | Separate allocation, E7 DDR safety confirmed. CPU pinned to one or two allocated logical CPUs. GPU only with an allocated idle UUID and ≥8 GiB free VRAM as a preflight guard. | None |
+| Untimed validation after recovery | 5 eligible priority pairs | 1 | Shared CPU using one logical CPU and one thread | None |
+| Timing with recovered arms | 5 eligible priority pairs | 1 | Same isolated CPU policy, remeasure original and pruned controls in the same job | Twice the corresponding unrecovered counts |
 | Later B0–B4 | 10 receipts | Same stage limits | Two distinct APTOS B4 arms. B3/B4 require external source receipts. | Same formula by dataset |
 
 Timing counts assume four backends pass compatibility and parity, batch 1, four variants, two scopes and three repetitions. They exclude warm-up, quality checks, preprocessing verification and export. The five priority pairs total **345,792 timed calls**. Available host resources, wall-clock duration and output sizes on HPC are unmeasured. The resource floors are allocation policy, not measured memory demand. Apply explicit lab quota limits in addition to the filesystem free-space guard. Budget about 15 GiB for prepared outputs. Start with 23 GiB free so the last job can still meet the 11 GiB combined launch guard if four preceding pairs each consume 3 GiB. Budget recovery storage separately.
@@ -137,7 +139,7 @@ A separate fixed, grade-complete pilot can be run with `--sample-count 100` at a
 
 ### Untimed validation on shared CPU
 
-With the already prepared `pilot_100_v1` campaign, use `validate` for parity and classification quality. It restores each prepared eager state, verifies the recorded artifact hashes and runs each backend on the same 100 frozen validation rows in manifest order. It uses the same preprocessing, FP32 logits, tolerances and argmax gate as measurement. E7 still receives the global image and both local views. There are no warm-up passes, latency or throughput estimates, exports or recovery. The execution environment and sample arguments must match preparation. Existing manifests from `c101b1a` are accepted only if their source map and all other protocol fields match that exact preparation format. Their original digests remain in use. To finish an incomplete preparation or create recovery artifacts for an existing campaign at that revision, use its preparation revision or a new campaign root.
+With the already prepared `pilot_100_v1` campaign, use `validate` for parity and classification quality. It restores each prepared eager state, verifies the recorded artifact hashes and runs each backend on the same 100 frozen validation rows in manifest order. It uses the same preprocessing, FP32 logits, tolerances and argmax gate as measurement. E7 still receives the global image and both local views. There are no warm-up passes, latency or throughput estimates, exports or recovery. The environment and sample arguments must match preparation. The staged runner accepts the reviewed source maps of `c101b1a` (prepare) and `f406ddf` (validation) for reuse. Every other protocol field and artifact hash must match. Recovery has a separate manifest that binds both original receipts and the current recovery source. To finish an incomplete preparation from a prior revision, use that preparation revision or a new campaign root.
 
 Use the reviewed checkout in an approved shared HPC session. Select one logical CPU permitted by the session and avoid the CPU and storage resources assigned to other lab jobs. The command below takes the first allowed CPU by default. Set `VALIDATION_CPU` beforehand if the lab has assigned another. It pins the process before Python starts, lowers priority and limits the runtime thread pools. The allocation ID is a report label for shared CPU, and the report records `cpu_mode: shared` and `exclusive_cpu_confirmed: false`.
 
@@ -211,18 +213,47 @@ launch_opt opt-time-e5a measure --job E5_APTOS2019 --allocation-id "$MEASURE_ALL
 
 Run one timing session at a time in priority order. Confirm there are no overlapping preparations or other workloads competing for resources before each timing session. `tmux ls` and `tail -f "$logdir/opt-time-e5a.log"` show activity without touching other sessions. To run directly instead of tmux, replace `launch_opt <session>` with `"$PYTHON" -m novelty_integrated.optimization.hpc`.
 
-Recovery is opt-in and separate from measurement. Start it only after reviewing the unrecovered results and confirming it is safe for DDR E7. This command uses CPU. A GPU allocation also requires `--recovery-device cuda:0 --gpu-uuid <allocated-UUID> --confirm-ddr-e7-safe`. Verify GPU assignment with the lab and avoid a GPU shared with another job.
+### Three-epoch recovery and untimed validation
+
+Start with the shell setup in [Untimed validation on shared CPU](#untimed-validation-on-shared-cpu) so the environment and `pilot_100_v1` path match the existing campaign. Use an updated review checkout separate from any checkout serving a live training or validation job. Review the chosen job's `validation/report.json` for `outcome: PASS`. Every unrecovered variant/backend must pass. DDR E5 and E6 can queue only after their passing reports exist. `measure` is independent of this gate.
+
+Use a CPU allocation approved for sustained recovery training, including CPU, RAM and filesystem I/O that will leave the existing DDR E7 job undisturbed. Wait for ongoing optimization validation or preparation to release the campaign locks. Keep one recovery process at a time. The CLI checks affinity, cgroup quota, RAM, storage and explicit E7 DDR safety confirmation. The GPU remains hidden for CPU recovery. These checks coordinate the framework's jobs and do not reserve resources from other lab users. GPU recovery is optional and only possible with a separately reserved idle GPU UUID that passes the CLI's process and memory guards. The commands below use CPU.
 
 ```bash
 : "${RECOVERY_ALLOCATION:?set the separately approved recovery allocation identifier}"
-: "${RECOVERY_CPUS:?set the allocated IDs for the recovery job}"
-launch_opt opt-recover-e5a recover --job E5_APTOS2019 --allocation-id "$RECOVERY_ALLOCATION" \
-  --cpus "$RECOVERY_CPUS" --threads 4 --authorize-recovery --recovery-epochs 3
-# After this stage completes, use a separate isolated timing session.
-launch_opt opt-post-e5a measure-recovered --job E5_APTOS2019 --allocation-id "$MEASURE_ALLOCATION" \
-  --cpus "$MEASURE_CPUS" --threads 4 --confirm-isolated-cpu
+: "${RECOVERY_CPU:?set one approved logical CPU for recovery}"
+RECOVERY_JOB=E5_APTOS2019
+recover_arm() {
+  taskset -c "$RECOVERY_CPU" nice -n 10 env \
+    CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    "$PYTHON" -m novelty_integrated.optimization.hpc recover --job "$RECOVERY_JOB" \
+    --sample-count 100 --allocation-id "$RECOVERY_ALLOCATION" --cpus "$RECOVERY_CPU" --threads 1 \
+    --confirm-ddr-e7-safe --authorize-recovery --recovery-device cpu \
+    --recovery-epochs 3 --recovery-micro-batch 4 --recovery-ratio "$1"
+}
+
+# Run one arm, then inspect its output before scheduling the others.
+recover_arm 0.1
+# Use the same command to resume an interrupted 10% arm.
+# After inspection, complete the 0% control and the two other pruning ratios.
+for ratio in 0 0.3 0.5; do
+  recover_arm "$ratio" || break
+done
 ```
 
-Each pair has a `protocol.json` and independent `prepared/`, `validation/`, `measurement/`, `recovered/` and `post-recovery/` outputs. Repeat the same stage and arguments to continue after interruption. Preparation and recovery reuse completed arms after checking their artifact hashes and protocol. An incomplete arm restarts from its parent. Completed timing directories are write-once. An interrupted timing job measures the pair again to keep comparisons within one allocation. Recovery timing remeasures original, unrecovered and recovered arms together. Backend failures and missing reports remain explicit in JSON. Protocol changes outside the documented compatibility case require a new campaign root. Original checkpoints stay read-only. Temporary or derived weights and logs remain external.
+Repeat with `RECOVERY_JOB` set to `E6_APTOS2019`, `E7_APTOS2019`, `E5_DDR` or `E6_DDR` after each passes validation and resources are confirmed. Budget 12 recovery epochs per job and 60 across the five jobs. Wall time and memory use have not been measured on HPC. At launch the CLI reserves 3 GiB above the configured free-space margin for one arm, or 8 GiB for the full sweep. Check account quota separately. Checkpoints with model, optimizer, RNG and optional EMA state are stored atomically at completed epoch boundaries under `recovered/progress/`. An interrupted epoch restarts from the last complete boundary. An interrupted export can reuse the saved final epoch. Completed arms are checked and skipped. Resume with the same configuration, device and reviewed source. The separate `recovered/recovery_protocol.json` binds the original protocol, prepared receipts and existing validation report hashes. Original artifacts, validation reports and training worktrees stay read-only.
+
+```bash
+# After all four arms of the chosen RECOVERY_JOB have prepared recovered exports.
+taskset -c "$VALIDATION_CPU" nice -n 10 env \
+  CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  "$PYTHON" -m novelty_integrated.optimization.hpc validate-recovered --job "$RECOVERY_JOB" \
+  --sample-count 100 --shared-cpu --threads 1 --cpus "$VALIDATION_CPU" \
+  --allocation-id shared-cpu-pilot100-validation
+```
+
+Read `validation-recovered/summary.csv` for the backend table and `validation-recovered/report.json` for matched before/after metric deltas and ranking. Each backend is compared with its own recovered eager variant on the exact same ordered validation inputs used before recovery. Rank the three pruned ratios by eager macro-F1, then lower grade MAE, then smaller ratio. The 0% control is excluded from selection. All backend parity checks must pass before the report selects a ratio. Selection from this reused subset is exploratory. `measure` and `measure-recovered` remain available separately and require an exclusive allocation.
+
+Each pair has a `protocol.json` and independent `prepared/`, `validation/`, `recovered/`, `validation-recovered/`, `measurement/`, and `post-recovery/` outputs. Completed reports and exports are write-once. An interrupted timing job measures the pair again to keep comparisons within one allocation. Protocol changes outside the documented compatibility case require a new campaign root. Temporary or derived weights and logs remain external.
 
 Set `CADVIT_OPT_CAMPAIGN` in JupyterLab to display reviewed reports through the [optimization notebook index](../../notebooks/optimization/README.md). The stage writes `report.json`, `summary.csv`, `comparison.svg`, and `tradeoff.svg` only after a completed measurement. No production results are included in the notebook templates.
