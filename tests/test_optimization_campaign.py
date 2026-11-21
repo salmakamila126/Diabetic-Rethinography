@@ -197,7 +197,7 @@ class CampaignTests(unittest.TestCase):
             recovered = cli._parser().parse_args(arguments + ["--authorize-recovery", "--recovery-epochs", "3", "--prune", "0.3"])
             allocation = {"id": "synthetic", "cpus": [0], "threads": 1, "exclusive_cpu_confirmed": True}
             plan, recover_plan = cli._plan(base, synthetic), cli._plan(recovered, synthetic)
-            source = workflow._source()
+            source = {k: v for k, v in workflow._source().items() if k != "coordination.py"}
             with patch.object(workflow, "_source", return_value={**source, **workflow._PRE_VALIDATION_SOURCE}):
                 workflow.execute("prepare", base, synthetic, plan, allocation)
             with self.assertRaisesRegex(ValueError, "passing unrecovered validate"):
@@ -228,10 +228,14 @@ class CampaignTests(unittest.TestCase):
             recovered.recovery_ratio = 0.3
             with patch.object(recovery, "recover", side_effect=train) as trainer, patch.object(
                     benchmark, "time_backend") as timer:
-                with self.assertRaises(InterruptedError):
-                    workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                with patch.object(workflow, "_source", return_value={**source, **workflow._SERIAL_RECOVERY_SOURCE}):
+                    with self.assertRaises(InterruptedError):
+                        workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                progress_protocol = output / "recovered/recovery_protocol.json"
+                old_recovery_sha = phase.sha256(progress_protocol)
                 self.assertFalse((output / "recovered/pruned_30/prepared.json").exists())
                 workflow.execute("recover", recovered, synthetic, recover_plan, allocation)
+                self.assertEqual(phase.sha256(progress_protocol), old_recovery_sha)
                 self.assertIsNotNone(trainer.call_args.kwargs["resume"])
                 with self.assertRaisesRegex(ValueError, "arm incomplete"):
                     workflow.execute("validate-recovered", base, synthetic, plan, shared)
@@ -312,7 +316,8 @@ class CampaignTests(unittest.TestCase):
             with patch.object(backends, "capabilities", return_value=capabilities):
                 plan = cli._plan(args, entry)
             allocation = {"cpu_mode": "shared", "exclusive_cpu_confirmed": False, "threads": 1, "cpus": [0]}
-            predecessor = {**workflow._source(), **workflow._PRE_VALIDATION_SOURCE}
+            predecessor = {**{k: v for k, v in workflow._source().items() if k != "coordination.py"},
+                           **workflow._PRE_VALIDATION_SOURCE}
             with patch.object(workflow, "_source", return_value=predecessor), patch.object(
                     backends, "build", side_effect=export_fixture):
                 workflow.execute("prepare", args, entry, plan, allocation)

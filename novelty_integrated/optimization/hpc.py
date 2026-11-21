@@ -1,18 +1,20 @@
 """HPC campaign orchestration. Inventory and audit never launch a workload."""
 
 import argparse
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import sys
 from importlib.metadata import PackageNotFoundError, version
 
 from novelty import foundation_adaptation as fa
 from novelty import preof_phase1 as phase
-from . import backends, models, pruning, registry
+from . import backends, coordination, models, pruning, registry
 from .__main__ import _parser as run_parser, _plan
+from .coordination import parse_cpus as _parse_cpus
 
 GIB = 1024**3
 PRIORITY = ("E5_APTOS2019", "E6_APTOS2019", "E7_APTOS2019", "E5_DDR", "E6_DDR")
@@ -48,7 +50,7 @@ def receipt(entry):
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("inventory", *STAGES))
+    parser.add_argument("stage", choices=("inventory", "recovery-status", *STAGES))
     parser.add_argument("--job", choices=tuple(inventory()))
     parser.add_argument("--root", type=Path, default=os.environ.get("CADVIT_ARTIFACT_ROOT"))
     parser.add_argument("--campaign-root", type=Path, default=os.environ.get("CADVIT_OPT_CAMPAIGN"))
@@ -67,6 +69,8 @@ def _parser():
     parser.add_argument("--recovery-epochs", type=int, choices=(3,))
     parser.add_argument("--recovery-ratio", type=float, choices=(0.0, *pruning.RATIOS),
                         help="Recover only this arm. Omit to process all four sequentially.")
+    parser.add_argument("--max-recovery-workers", type=int, choices=range(1, coordination.MAX_RECOVERY_WORKERS + 1),
+                        default=1, help="Global CPU recovery worker ceiling across campaigns. Default 1.")
     parser.add_argument("--recovery-micro-batch", type=int, choices=(1, 4, 8, 16, 32), default=4)
     parser.add_argument("--recovery-device", choices=("cpu", "cuda:0"), default="cpu")
     parser.add_argument("--authorize-recovery", action="store_true")
@@ -109,26 +113,20 @@ def _cpu_quota():
     return min(limits) if limits else None
 
 
-def _disk(path):
+def _filesystem_path(path):
     real = path.resolve()
     for parent in (real, *real.parents):
         if parent.is_dir():
-            return shutil.disk_usage(parent).free
+            return parent
     raise ValueError("No existing filesystem ancestor")
+
+
+def _disk(path):
+    return shutil.disk_usage(_filesystem_path(path)).free
 
 
 def _affinity():
     return sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
-
-
-def _parse_cpus(value):
-    members = set()
-    for item in value.split(","):
-        numbers = [int(p) for p in item.split("-")]
-        if not 1 <= len(numbers) <= 2 or not 0 <= numbers[0] <= numbers[-1] < 65536:
-            raise ValueError("Invalid CPU list")
-        members.update(range(numbers[0], numbers[-1] + 1))
-    return sorted(members)
 
 
 def _arguments(args, entry):
@@ -152,7 +150,8 @@ def _arguments(args, entry):
 def audit(args, entry):
     root, campaign, checkpoint, snapshot, manifest = _arguments(args, entry)
     resources = {"cpu_affinity": _affinity(), "cgroup_cpu_quota": _cpu_quota(),
-                 "available_ram_bytes": _available_ram(), "free_campaign_bytes": _disk(campaign)}
+                 "available_ram_bytes": _available_ram(), "free_campaign_bytes": _disk(campaign),
+                 "pressure": coordination.pressure(_cgroups())}
     capabilities = backends.capabilities()
     selected = list(dict.fromkeys(["eager", *args.backend]))
     missing = {name: capabilities[name]["missing_packages"] for name in selected
@@ -211,16 +210,8 @@ def audit(args, entry):
     return report
 
 
-@contextmanager
-def _lock(path, *, shared=False):
-    import fcntl
-
-    with path.open("a+b") as stream:
-        try:
-            fcntl.flock(stream, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError(f"Busy campaign resource: {path.name}. Wait or resume later.") from exc
-        yield
+def _cpu_recovery(args):
+    return args.stage == "recover" and args.recovery_device == "cpu"
 
 
 def _resource_guard(args, campaign):
@@ -237,11 +228,15 @@ def _resource_guard(args, campaign):
             raise ValueError("Start validation with taskset -c on one allowed logical CPU and use --threads 1")
     elif args.shared_cpu:
         raise ValueError("--shared-cpu applies only to untimed validation")
-    if args.stage == "recover" and args.recovery_device == "cpu" and (
+    if _cpu_recovery(args) and (
             args.threads not in (1, 2) or len(cpus) != args.threads or cpus != affinity):
         raise ValueError("Start CPU recovery with taskset on one or two approved CPUs and match --threads to the CPU count")
     if args.threads < 1 or len(cpus) < args.threads or not set(cpus) <= set(affinity):
         raise ValueError("Requested threads and CPUs exceed the process allocation")
+    if min(args.min_ram_gib, args.min_free_gib) < 1:
+        raise ValueError("RAM and disk reserve settings must be positive")
+    if _cpu_recovery(args):
+        return cpus  # Recheck these resources atomically with every other recovery lease.
     quota = _cpu_quota()
     if quota is not None and quota < args.threads:
         raise ValueError("CPU cgroup quota is below the requested threads")
@@ -250,12 +245,35 @@ def _resource_guard(args, campaign):
     ram = _available_ram()
     # Resource floors are conservative policy settings, not measured consumption.
     additional_disk = {"prepare": 6, "recover": 8 if args.recovery_ratio is None else 3}.get(args.stage, 1)
-    if args.min_ram_gib < 1 or ram is None or ram < args.min_ram_gib * GIB:
+    if ram is None or ram < args.min_ram_gib * GIB:
         raise ValueError("Insufficient available RAM or unreadable RAM limit")
-    if args.min_free_gib < 1 or _disk(campaign) < (args.min_free_gib + additional_disk) * GIB:
+    if _disk(campaign) < (args.min_free_gib + additional_disk) * GIB:
         raise ValueError("Insufficient disk above the configured reserve")
     os.sched_setaffinity(0, cpus)
     return cpus
+
+
+def _recovery_resources(campaign):
+    filesystem = _filesystem_path(campaign)
+    return {"available_ram_bytes": _available_ram(), "free_disk_bytes": shutil.disk_usage(filesystem).free,
+            "free_inodes": os.statvfs(filesystem).f_favail, "cpu_quota": _cpu_quota(),
+            "cpu_quota_known": Path("/sys/fs/cgroup/cgroup.controllers").is_file(),
+            "pressure": coordination.pressure(_cgroups()), "load_average": os.getloadavg()}
+
+
+def _workload_locks(args, cpus, lock_dir, host, campaign):
+    request = None
+    destination = campaign / args.job / "recovered"
+    if _cpu_recovery(args):
+        demand_gib = 8 if args.recovery_ratio is None else 3
+        request = {"job": args.job, "campaign": str(campaign), "allocation_id": args.allocation_id,
+                   "cpus": cpus, "physical_core_siblings": coordination.physical_cores(cpus),
+                   "threads": args.threads, "max_workers": args.max_recovery_workers,
+                   "ram_bytes": args.min_ram_gib * GIB, "disk_bytes": demand_gib * GIB,
+                   "disk_reserve_bytes": args.min_free_gib * GIB,
+                   "filesystem_device": _filesystem_path(destination).stat().st_dev}
+    return coordination.workload_locks(host, lock_dir, stage=args.stage, job=args.job, cpus=cpus,
+                                       request=request, read_resources=lambda: _recovery_resources(destination))
 
 
 def _gpu_guard(args):
@@ -281,6 +299,11 @@ def main(argv=None):
     if args.stage == "inventory":
         print(json.dumps({name: receipt(entry) for name, entry in jobs.items()}, indent=2))
         return
+    if args.stage == "recovery-status":
+        host = coordination.host_locks()
+        print(json.dumps({"lock_directory": str(host), "ceiling": coordination.MAX_RECOVERY_WORKERS,
+                          "active_cpu_recovery": coordination.status(host)}, indent=2))
+        return
     if not args.job:
         raise SystemExit("--job is required")
     entry = jobs[args.job]
@@ -299,6 +322,10 @@ def main(argv=None):
         raise ValueError("Recovery flags cannot be used in another stage")
     if args.stage == "recover" and args.recovery_device == "cpu" and args.gpu_uuid:
         raise ValueError("CPU recovery cannot request a GPU UUID")
+    if args.max_recovery_workers > 1 and (not _cpu_recovery(args) or args.recovery_ratio is not None):
+        raise ValueError("Parallel recovery is CPU-only and each parallel job must run the complete four-arm sweep")
+    if _cpu_recovery(args) and args.confirm_isolated_cpu:
+        raise ValueError("CPU recovery records affinity only. Do not pass --confirm-isolated-cpu")
     root, campaign, checkpoint, snapshot, manifest = _arguments(args, entry)
     if not entry.evidence:
         raise ValueError(f"{args.job}: {entry.status}")
@@ -309,19 +336,21 @@ def main(argv=None):
     fa._safe_out(campaign / args.job, [checkpoint.parent, snapshot, root / "datasets", root / "cad_vit_runs"])
     lock_dir = root / "optimization_runs/.locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
+    host = coordination.host_locks()
     with ExitStack() as stack:
-        stack.enter_context(_lock(lock_dir / "cpu-coordinator", shared=args.stage == "prepare"))
-        if args.stage == "prepare":
-            for slot in range(2):
-                try:
-                    stack.enter_context(_lock(lock_dir / f"prepare-{slot}"))
-                    break
-                except RuntimeError:
-                    if slot == 1:
-                        raise
-            for cpu in cpus:
-                stack.enter_context(_lock(lock_dir / f"cpu-{cpu}"))
-        stack.enter_context(_lock(lock_dir / f"job-{args.job}"))
+        try:
+            admission = stack.enter_context(_workload_locks(args, cpus, lock_dir, host, campaign))
+        except coordination.RecoveryDeferred as exc:
+            print(json.dumps({"status": "RECOVERY_DEFERRED", "job": args.job, **exc.admission}), file=sys.stderr)
+            return coordination.TEMPORARY_FAILURE
+        except coordination.LockBusy as exc:
+            if not _cpu_recovery(args):
+                raise
+            print(json.dumps({"status": "RECOVERY_DEFERRED", "job": args.job, "reason": str(exc)}), file=sys.stderr)
+            return coordination.TEMPORARY_FAILURE
+        if admission:
+            print(json.dumps({"status": "RECOVERY_ADMITTED", "cpu_mode": "affinity_limited",
+                              "exclusive_cpu_confirmed": False, **admission}), flush=True)
         report = audit(args, entry)
         if report["status"] != "AUDIT_PASS":
             print(json.dumps(report, indent=2))
@@ -354,6 +383,8 @@ def main(argv=None):
             allocation["cpu_mode"] = "shared"
         if args.stage == "recover":
             allocation["gpu_uuid"] = args.gpu_uuid
+            if admission:
+                allocation["cpu_mode"] = "affinity_limited"
         return execute(args.stage, run, entry, plan, allocation)
 
 

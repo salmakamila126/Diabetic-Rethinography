@@ -1,7 +1,6 @@
 """Explicit entry point for future read-only evaluation of original checkpoints."""
 
 import argparse
-import copy
 from functools import partial
 import json
 from pathlib import Path
@@ -189,6 +188,8 @@ def _compare(parent, derived):
 
 
 def execute(args, entry, plan):
+    if args.recovery_epochs:
+        raise ValueError("Run recovery through novelty_integrated.optimization.hpc recover to acquire the job and resource locks")
     if not entry.evidence:
         registry.require_sources(entry)
     checkpoint = models.verify_receipt(entry, args.checkpoint)
@@ -200,9 +201,6 @@ def execute(args, entry, plan):
     rows = models.load_rows(entry, args.artifact_root, args.manifest_source_root)
     batches = models.validation_batches(rows["val"], batch_size=args.batch_size,
                                         sample_count=args.sample_count, seed=args.sample_seed)
-    if args.recovery_epochs:
-        for row in rows["train"]:
-            phase.require_hash(row["path"], row["sha256"])
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(1)
     torch.set_float32_matmul_precision("highest")
@@ -227,32 +225,13 @@ def execute(args, entry, plan):
                               checked_logits=checked_logits)
     variants = [parent]
     for ratio in plan["prune"]:
-        name = f"pruned_{round(100 * ratio):02d}" if ratio else "unpruned_recovery_control"
-        if ratio:
-            derived, topology = pruning.prune_hf(original, ratio)
-            pruned = _measure_variant(f"{name}_without_recovery", derived, batches, prepare, plan,
-                                     output / f"{name}_without_recovery", tensor_digest, reference=parent)
-            if pruned["profile"]["parameters"] >= parent["profile"]["parameters"]:
-                raise ValueError("Pruning yielded no parameter reduction")
-            pruned.update(ratio=ratio, treatment="pruned_without_recovery", topology=topology)
-            variants.append(pruned)
-        else:
-            derived, topology = copy.deepcopy(original), []
-        if args.recovery_epochs:
-            from .recovery import recover
-
-            recovery = recover(derived, entry, rows, processor, epochs=args.recovery_epochs,
-                               micro_batch=args.recovery_micro_batch, device=args.recovery_device)
-            after = _measure_variant(f"{name}_with_recovery", derived, batches, prepare, plan,
-                                     output / f"{name}_with_recovery", tensor_digest, reference=parent)
-            after.update(ratio=ratio, treatment="pruned_with_recovery" if ratio else "unpruned_recovery_control",
-                         topology=topology, recovery=recovery)
-            if ratio:
-                after["delta_vs_pruned_before_recovery"] = {
-                    name: _compare(pruned["backends"][name], result)
-                    for name, result in after["backends"].items() if result["status"] == "VALIDATED"
-                    and pruned["backends"][name]["status"] == "VALIDATED"}
-            variants.append(after)
+        name = f"pruned_{round(100 * ratio):02d}_without_recovery"
+        derived, topology = pruning.prune_hf(original, ratio)
+        pruned = _measure_variant(name, derived, batches, prepare, plan, output / name, tensor_digest, reference=parent)
+        if pruned["profile"]["parameters"] >= parent["profile"]["parameters"]:
+            raise ValueError("Pruning yielded no parameter reduction")
+        pruned.update(ratio=ratio, treatment="pruned_without_recovery", topology=topology)
+        variants.append(pruned)
         del derived
 
     models.verify_receipt(entry, checkpoint)

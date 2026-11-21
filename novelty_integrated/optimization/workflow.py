@@ -32,6 +32,12 @@ _PRE_RECOVERY_SOURCE = {
     "workflow.py": "9ddf87993184f78971f2e77bc81ed71fb2dd34cc985c0f118c852f457c489f1e",
     "recovery.py": _PRE_VALIDATION_SOURCE["recovery.py"],
 }
+# c7e61a8 introduced the immutable recovery protocol and epoch checkpoints. This revision changes scheduling only.
+_SERIAL_RECOVERY_SOURCE = {
+    "__main__.py": "e22734f17a438946065776da3e8f9f7bbd2fa0888624a5e9a3f05a7efffdb04f",
+    "hpc.py": "8240d7f520d095e5f063023063af71483ad1872fc4d48b9ba8985a3572fa30da",
+    "workflow.py": "563ac65787ff1254180e9f5f82c80990dbe3811a4385e1a7d3a68d2217891792",
+}
 
 
 def read(path):
@@ -273,14 +279,16 @@ def _arm_progress(directory, recovery_sha, parent_sha, ratio, epochs):
     return state, save
 
 
-def _recovery_record(path, binding, policy=None):
+def _recovery_record(path, binding, policy=None, *, serial_source):
     if policy is not None and not path.is_file():
         if path.parent.exists() and any(path.parent.iterdir()):
             raise ValueError("Existing recovery outputs are from another protocol. Preserve them in place.")
         path.parent.mkdir(exist_ok=True)
         fa._atomic_json(path, {**binding, "policy": policy})
     record = read(path)
-    if record != {**binding, "policy": record["policy"]} or (policy is not None and record["policy"] != policy):
+    expected = {**binding, "policy": record["policy"]}
+    if (record not in (expected, {**expected, "framework_source_sha256": serial_source}) or
+            (policy is not None and record["policy"] != policy)):
         raise ValueError("Recovery protocol differs from the frozen parent, source, or requested configuration")
     return {**record["policy"], "recovery_protocol_sha256": fa._digest_json(record)}
 
@@ -317,8 +325,10 @@ def execute(stage, args, entry, plan, allocation):
         if not run_file.exists():
             fa._atomic_json(run_file, run)
     recorded = read(run_file)
-    validation_sources = (source, {**source, **_PRE_RECOVERY_SOURCE})
-    compatible_sources = (*validation_sources, {**source, **_PRE_VALIDATION_SOURCE})
+    legacy_source = {name: digest for name, digest in source.items() if name != "coordination.py"}
+    serial_source = {**legacy_source, **_SERIAL_RECOVERY_SOURCE}
+    validation_sources = (source, serial_source, {**legacy_source, **_PRE_RECOVERY_SOURCE})
+    compatible_sources = (*validation_sources, {**legacy_source, **_PRE_VALIDATION_SOURCE})
     if not any(recorded == {**run, "framework_source_sha256": version} for version in compatible_sources):
         raise ValueError("Run protocol differs. Use a new campaign root for changed inputs, code or versions.")
     digest = fa._digest_json(recorded)
@@ -383,7 +393,7 @@ def execute(stage, args, entry, plan, allocation):
             raise ValueError("Unknown recovery ratio")
         settings = {"epochs": EPOCHS, "micro_batch": args.recovery_micro_batch, "device": args.recovery_device}
         policy = _recovery_record(recovery_file, binding, {**settings, "threads": args.threads,
-                                                         "gpu_uuid": allocation.get("gpu_uuid")})
+                                  "gpu_uuid": allocation.get("gpu_uuid")}, serial_source=serial_source)
         example = validate(batches[0])
         for ratio in selected:
             def train(model):
@@ -409,7 +419,7 @@ def execute(stage, args, entry, plan, allocation):
         raise ValueError("Unknown execution stage")
     if stage in ("measure-recovered", "validate-recovered"):
         if recovery_file.is_file():
-            policy = _recovery_record(recovery_file, binding)
+            policy = _recovery_record(recovery_file, binding, serial_source=serial_source)
         elif stage == "measure-recovered":
             policy = read(recovered / "original" / "prepared.json")["recovery_policy"]
         else:
@@ -431,7 +441,7 @@ def execute(stage, args, entry, plan, allocation):
             recheck()
             phase.require_hash(validation_dir / "report.json", validation_sha)
 
-        return _validate_prepared(output / "validation-recovered", identity, (source,), extra, original, batches,
+        return _validate_prepared(output / "validation-recovered", identity, (source, serial_source), extra, original, batches,
                                   validate, plan, entry, allocation, recheck_recovery, before=before)
 
     target = output / ("measurement" if not extra else "post-recovery")

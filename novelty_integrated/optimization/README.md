@@ -84,7 +84,7 @@ python -m novelty_integrated.optimization run "${BASE[@]}" --execute \
 python -m novelty_integrated.optimization run "${BASE[@]}" --execute \
   --prune 0.1 0.3 0.5 --backend eager --output "$OUT/${DATASET}_${ARM}_pruning"
 
-# For three-epoch recovery and the 0% control, see the staged HPC commands below.
+# Recovery execution uses the staged HPC commands below, which enforce the global ceiling.
 ```
 
 For B3, pass `--external-source-dir` for the copied `foundation_b3_parallel_runner.py` and `sampler.py`. For B4-Q/B4-R, supply the copied `b4_runner.py` and `b4_common.py`. The approved source SHA-256 receipts are printed by the registry. For B0–B4 benchmarking, omit recovery options. Optional backends require `onnx`, `onnxruntime` and/or `openvino` in the selected environment. The authentic model and processor require `transformers==4.57.3` and local pinned weights. A missing package is recorded explicitly. Each successful run writes `plan.json`, `report.json`, `summary.csv`, `comparison.svg` and per-variant export artifacts under a fresh external directory.
@@ -92,10 +92,10 @@ For B3, pass `--external-source-dir` for the copied `foundation_b3_parallel_runn
 ## CPU checks
 
 ```bash
-python -m unittest tests.test_convnext_optimization tests.test_optimization_campaign -v
+python -m unittest tests.test_convnext_optimization tests.test_optimization_campaign tests.test_optimization_coordination -v
 ```
 
-Tests use synthetic tensors, temporary generated images and checkpoint fixtures. Optional backend and library-specific tests are skipped when their package is missing. A synthetic pass does not establish real-checkpoint numerical equivalence, latency or classification quality.
+Tests use synthetic tensors, temporary generated images and checkpoint fixtures. On Linux, the coordination tests exercise real multiprocess `flock`, including six held slots and a seventh contender. Optional backend and library-specific tests are skipped when their package is missing. A synthetic pass does not establish real-checkpoint numerical equivalence, latency or classification quality.
 
 ## Staged HPC campaign
 
@@ -128,7 +128,7 @@ Request approved resources before launch. Set the shell variables below to the s
 | --- | ---: | ---: | --- | ---: |
 | Export and pruning preparation | 5 | 2 on disjoint allocated CPUs | 2 CPU threads per worker, ≥6 GiB available RAM per worker with ≥12 GiB at launch for two, plan 3 GiB added per pair. The launch guard reserves for two workers (6 GiB) plus a 5 GiB free shared reserve. | None |
 | Original and pruned timing | 5 | 1 | 4 isolated CPU threads, ≥6 GiB available RAM, 1 GiB extra plus reserve, CPU only | APTOS 35,136 per pair, DDR 120,192 per pair |
-| Recovery | 5 eligible priority pairs, E5/E6 and completed E7 APTOS2019 | 1 | Separate allocation, E7 DDR safety confirmed. CPU pinned to one or two allocated logical CPUs. GPU only with an allocated idle UUID and ≥8 GiB free VRAM as a preflight guard. | None |
+| Recovery | 5 eligible priority pairs, E5/E6 and completed E7 APTOS2019 | CPU 1 by default, up to 6 globally; GPU 1 | Approved resources and E7 DDR safety confirmation. CPU pinned to one or two logical CPUs on distinct physical cores per worker. GPU only with an allocated idle UUID and ≥8 GiB free VRAM as a preflight guard. | None |
 | Untimed validation after recovery | 5 eligible priority pairs | 1 | Shared CPU using one logical CPU and one thread | None |
 | Timing with recovered arms | 5 eligible priority pairs | 1 | Same isolated CPU policy, remeasure original and pruned controls in the same job | Twice the corresponding unrecovered counts |
 | Later B0–B4 | 10 receipts | Same stage limits | Two distinct APTOS B4 arms. B3/B4 require external source receipts. | Same formula by dataset |
@@ -202,7 +202,7 @@ launch_opt opt-prep-e5a prepare --job E5_APTOS2019 --allocation-id "$PREP_ALLOCA
 launch_opt opt-prep-e6a prepare --job E6_APTOS2019 --allocation-id "$PREP_ALLOCATION" --cpus "$PREP_CPUS_B" --threads 2
 ```
 
-Wait for both sessions to exit and verify their logs. Repeat for E7 APTOS2019 and E5 DDR, then E6 DDR. Never launch more than two preparation jobs. Coordinator locks serialize timing and recovery and reject overlapping preparation CPUs and concurrent writers for the same job. They coordinate only processes using this campaign framework on a filesystem with working POSIX locks. Don’t use this workflow on a shared filesystem that cannot provide those locks. Keep DDR E7 and other lab jobs undisturbed.
+Wait for both sessions to exit and verify their logs. Repeat for E7 APTOS2019 and E5 DDR, then E6 DDR. Never launch more than two preparation jobs. Coordinator locks prevent timing, untimed validation and preparation from overlapping recovery. Keep DDR E7 and other lab jobs undisturbed.
 
 ```bash
 : "${MEASURE_ALLOCATION:?set the exclusive CPU measurement allocation identifier}"
@@ -217,7 +217,11 @@ Run one timing session at a time in priority order. Confirm there are no overlap
 
 Start with the shell setup in [Untimed validation on shared CPU](#untimed-validation-on-shared-cpu) so the environment and `pilot_100_v1` path match the existing campaign. Use an updated review checkout separate from any checkout serving a live training or validation job. Review the chosen job's `validation/report.json` for `outcome: PASS`. Every unrecovered variant/backend must pass. DDR E5 and E6 can queue only after their passing reports exist. `measure` is independent of this gate.
 
-Use a CPU allocation approved for sustained recovery training, including CPU, RAM and filesystem I/O that will leave the existing DDR E7 job undisturbed. Wait for ongoing optimization validation or preparation to release the campaign locks. Keep one recovery process at a time. The CLI checks affinity, cgroup quota, RAM, storage and explicit E7 DDR safety confirmation. The GPU remains hidden for CPU recovery. These checks coordinate the framework's jobs and do not reserve resources from other lab users. GPU recovery is optional and only possible with a separately reserved idle GPU UUID that passes the CLI's process and memory guards. The commands below use CPU.
+Use resources approved for sustained recovery, including CPU, RAM and filesystem I/O that leave the existing DDR E7 job undisturbed. The GPU remains hidden for CPU recovery. GPU recovery requires a separately reserved idle GPU UUID and remains exclusive. `--max-recovery-workers` defaults to 1. Request a higher ceiling from 2 to 6 only for full four-arm CPU jobs, after the lab has approved parallel work. Each worker takes one or two logical CPUs on distinct physical cores. No two recovery workers can reserve the same core or its SMT sibling. Affinity limits where the process runs and does not establish an exclusive lab allocation.
+
+CPU recovery leases use a private, boot-specific directory under `/var/tmp` for the research account. All participating terminals and checkouts on one host must see the same directory and working Linux `flock` semantics. This ceiling spans artifact roots and campaigns for that account on the host. The runner also holds the original artifact-root locks so that older checkouts using the same root continue to coordinate. Do not remove the lock files while jobs are active. The kernel releases slots, job locks and core leases when a process exits. The smallest ceiling requested by any active worker stays in force until that worker exits. `measure`, `measure-recovered`, GPU recovery and the untimed validation stages take the exclusive coordinator lock. Preparation and CPU recovery also exclude one another.
+
+Admission samples host and visible cgroup CPU, memory and I/O pressure (PSI), available RAM, CPU quota, and free bytes and inodes on the recovered output filesystem. It accounts conservatively for active workers' reservations. CPU `some`, memory `full`, or I/O `full` PSI at 25%, 0.5%, or 2% over the latest 10-second window caps new admissions at one worker. At 60%, 2%, or 10%, no new worker is admitted. Missing host PSI or cgroup-v2 CPU quota telemetry also caps new admissions at one. These are admission thresholds, not measured model requirements. A worker already running can finish. Check the lab's filesystem quota, I/O policy and live training allocation separately. With defaults, five full jobs reserve 30 GiB of RAM and budget 40 GiB of output growth plus 5 GiB free on one filesystem. Six need 36 GiB and 48 GiB plus the same reserve. Admission can still defer workers as free space and available RAM change.
 
 ```bash
 : "${RECOVERY_ALLOCATION:?set the separately approved recovery allocation identifier}"
@@ -241,10 +245,66 @@ for ratio in 0 0.3 0.5; do
 done
 ```
 
-Repeat with `RECOVERY_JOB` set to `E6_APTOS2019`, `E7_APTOS2019`, `E5_DDR` or `E6_DDR` after each passes validation and resources are confirmed. Budget 12 recovery epochs per job and 60 across the five jobs. Wall time and memory use have not been measured on HPC. At launch the CLI reserves 3 GiB above the configured free-space margin for one arm, or 8 GiB for the full sweep. Check account quota separately. Checkpoints with model, optimizer, RNG and optional EMA state are stored atomically at completed epoch boundaries under `recovered/progress/`. An interrupted epoch restarts from the last complete boundary. An interrupted export can reuse the saved final epoch. Completed arms are checked and skipped. Resume with the same configuration, device and reviewed source. The separate `recovered/recovery_protocol.json` binds the original protocol, prepared receipts and existing validation report hashes. Original artifacts, validation reports and training worktrees stay read-only.
+For all five priority jobs, the launcher below starts one tmux session and log per job. Set the five CPU variables to approved logical CPU IDs on different physical cores. Leave the ceiling at 1 on a busy host or set `RECOVERY_MAX_WORKERS` only to the approved limit. Each session uses a full sequential 0%, 10%, 30%, 50% sweep. Exit 75 means a lock or resource gate deferred admission. The launcher retries that exit every 60 seconds and logs the reason. Validation or training failures stop that job and retain the log. The five jobs become eligible independently after passing `validate`.
 
 ```bash
-# After all four arms of the chosen RECOVERY_JOB have prepared recovered exports.
+: "${RECOVERY_ALLOCATION:?set the lab-approved recovery allocation identifier}"
+: "${RECOVERY_CPU_E5_APTOS2019:?set the approved logical CPU ID}"
+: "${RECOVERY_CPU_E6_APTOS2019:?set the approved logical CPU ID}"
+: "${RECOVERY_CPU_E7_APTOS2019:?set the approved logical CPU ID}"
+: "${RECOVERY_CPU_E5_DDR:?set the approved logical CPU ID}"
+: "${RECOVERY_CPU_E6_DDR:?set the approved logical CPU ID}"
+RECOVERY_MAX_WORKERS="${RECOVERY_MAX_WORKERS:-1}"
+RECOVERY_QUEUE_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
+jobs=(E5_APTOS2019 E6_APTOS2019 E7_APTOS2019 E5_DDR E6_DDR)
+cores=("$RECOVERY_CPU_E5_APTOS2019" "$RECOVERY_CPU_E6_APTOS2019" "$RECOVERY_CPU_E7_APTOS2019"
+       "$RECOVERY_CPU_E5_DDR" "$RECOVERY_CPU_E6_DDR")
+logdir="$CADVIT_OPT_CAMPAIGN/logs"
+mkdir -p "$logdir"
+
+launch_recovery() {
+  local job="$1" cpu="$2" session="recovery-$1-$RECOVERY_QUEUE_TAG"
+  tmux new-session -d -s "$session" -c "$PWD" -- bash -c '
+    log="$1"; shift
+    exec >>"$log" 2>&1
+    while :; do
+      "$@"
+      rc=$?
+      printf "[%s] recovery exit=%s\n" "$(date -u +%FT%TZ)" "$rc"
+      if ((rc != 75)); then exit "$rc"; fi
+      sleep 60
+    done
+  ' bash "$logdir/$session.log" env \
+    CADVIT_ARTIFACT_ROOT="$CADVIT_ARTIFACT_ROOT" CADVIT_OPT_CAMPAIGN="$CADVIT_OPT_CAMPAIGN" \
+    CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    taskset -c "$cpu" nice -n 10 "$PYTHON" -u -m novelty_integrated.optimization.hpc recover \
+    --job "$job" --sample-count 100 --allocation-id "$RECOVERY_ALLOCATION" --cpus "$cpu" --threads 1 \
+    --confirm-ddr-e7-safe --authorize-recovery --recovery-device cpu --recovery-epochs 3 \
+    --recovery-micro-batch 4 --max-recovery-workers "$RECOVERY_MAX_WORKERS"
+}
+
+if [[ "$RECOVERY_MAX_WORKERS" =~ ^[1-6]$ ]] && "$PYTHON" -c '
+import os, sys
+from novelty_integrated.optimization.coordination import physical_cores
+cpus = list(map(int, sys.argv[1:]))
+if not set(cpus) <= os.sched_getaffinity(0):
+    raise SystemExit("At least one requested CPU is outside this session affinity")
+print("Recovery physical core sibling groups:", physical_cores(cpus))
+' "${cores[@]}"; then
+  for i in "${!jobs[@]}"; do launch_recovery "${jobs[i]}" "${cores[i]}" || break; done
+fi
+```
+
+```bash
+"$PYTHON" -m novelty_integrated.optimization.hpc recovery-status
+tmux ls
+tail -f "$logdir/recovery-E5_APTOS2019-$RECOVERY_QUEUE_TAG.log"
+```
+
+Inspect `RECOVERY_ADMITTED` and `RECOVERY_DEFERRED` in each log for effective capacity, resource limits and conflicts. After an interruption, use a new `RECOVERY_QUEUE_TAG` and `launch_recovery <job> <same-CPU-ID>` for the affected job after its old session exits. Use the same model, recovery settings and device. The worker ceiling can change without changing the recovery protocol. Budget 12 recovery epochs per job and 60 across the five jobs. Wall time and memory use have not been measured on HPC. Checkpoints with model, optimizer, RNG and optional EMA state are stored atomically at completed epoch boundaries under `recovered/progress/`. An interrupted epoch restarts from the last complete boundary. An interrupted export can reuse the saved final epoch. Completed arms are checked and skipped. The separate `recovered/recovery_protocol.json` binds the original protocol, prepared receipts and existing validation report hashes. A verified recovery protocol from `c7e61a8` can resume with its original hashes and checkpoint. Original artifacts, validation reports and training worktrees stay read-only.
+
+```bash
+# Once the four arms are ready and all recovery workers have released the coordinator lock.
 taskset -c "$VALIDATION_CPU" nice -n 10 env \
   CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   "$PYTHON" -m novelty_integrated.optimization.hpc validate-recovered --job "$RECOVERY_JOB" \

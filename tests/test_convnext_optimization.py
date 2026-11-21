@@ -121,6 +121,10 @@ class OptimizationTests(unittest.TestCase):
         args = cli._parser().parse_args(args_for_test() + ["--recovery-epochs", "1", "--authorize-recovery",
                                                           "--prune", "0", "0.3"])
         self.assertEqual(cli._plan(args, self.entries["APTOS2019", "E5"])["prune"], [0.0, 0.3])
+        with patch.object(models, "verify_receipt") as verify:
+            with self.assertRaisesRegex(ValueError, "optimization.hpc recover"):
+                cli.main(args_for_test() + ["--execute", "--recovery-epochs", "3", "--authorize-recovery", "--prune", "0.3"])
+            verify.assert_not_called()
 
     def test_missing_checkpoint_and_pending_never_deserialize(self):
         entry = self.entries["APTOS2019", "E5"]
