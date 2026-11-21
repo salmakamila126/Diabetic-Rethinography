@@ -4,13 +4,13 @@
 
 Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak tercampur. **Buka [indeks notebook](notebooks/README.md) terlebih dahulu**.
 
-1. [01 — Reproduksi CAD-ViT](notebooks/01_CAD_ViT_Reproduction.ipynb): paper fidelity, V1, V2, balanced/recovery, dan keterbatasan reproduksi parsial.
-2. [02 — ConvNeXt B0–B4](notebooks/02_ConvNeXt_B0_B4_Validation.ipynb): studi validasi dan visualisasi confusion matrix/learning curves 10 run.
-3. [03 — ConvNeXt E5 Integrated](notebooks/03_ConvNeXt_E5_APTOS2019.ipynb): APTOS2019 training, validation, dan one-time final test yang telah selesai.
+1. [Reproduksi CAD-ViT](notebooks/reproduction/CAD_ViT_Reproduction.ipynb) mencakup fidelity terhadap paper, V1, V2, dan balanced/recovery.
+2. [ConvNeXt B0–B4 per dataset](notebooks/README.md#baseline-convnext-tiny-b0b4) mencakup 10 run validasi dengan histori dan figur asli.
+3. [ConvNeXt E5–E7 per dataset](notebooks/README.md#eksperimen-e5e7) memisahkan empat run terverifikasi E5/E6 dari protokol global/local E7 yang hasilnya belum terverifikasi di Git.
 
-Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) memuat perbandingan checkpoint terpilih, kurva lengkap, matriks kebingungan, metrik per grade, dan audit provenance. [Notebook E6 boundary-aware](notebooks/03_ConvNeXt_E6_Boundary_Aware.ipynb) dan [protokol implementasi](novelty_integrated/e6/README.md) mendokumentasikan rancangan eksperimen sebelum hasil HPC tersedia.
+Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) memuat perbandingan checkpoint, kurva lengkap, matriks kebingungan, metrik per grade, dan audit provenance. [Audit eksperimen dan snapshot lama](docs/NOTEBOOK_EXPERIMENT_AUDIT.md) mencatat pemindahan notebook. [Audit optimasi](docs/OPTIMIZATION_COMPATIBILITY.md) memisahkan benchmark historis ConvNeXtV2 dari protokol usulan untuk model di `salma`.
 
-**Jenis notebook:** ketiga notebook utama kini menggabungkan narasi ilmiah, pemeriksaan provenance, analisis artefak, contoh preprocessing nyata saat data berizin tersedia, dan sel preflight/smoke/training yang memanggil modul Python asli dengan sakelar eksplisit. Semua sakelar aksi dimatikan saat dibuka; notebook tidak otomatis melakukan training atau final-test inference. Kode arsip 105 sel dipertahankan. Gambar fundus yang izin distribusinya belum jelas tidak diunggah. Branch `main` dan `tio` tidak diubah. [Audit status dan keterbatasan reproduksibilitas](docs/RESEARCH_CONSOLIDATION_AUDIT.md) menjelaskan perbedaan antara source yang tersedia dan hasil historis.
+Notebook menggabungkan narasi ilmiah, pemeriksaan provenance dan tabel dari artefak terkomit. Semua aksi opsional dimatikan saat dibuka. Jika source eksekusi historis tersedia, notebook memanggil modul asli dengan sakelar eksplisit. Bukti reproduksi asli dan keterbatasannya tersedia dalam [audit konsolidasi historis](docs/RESEARCH_CONSOLIDATION_AUDIT.md).
 
 | Studi | Pertanyaan | Hasil validasi terbaik yang tersedia | Final test | Status eksekusi dari Git |
 | --- | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ flowchart LR
     E --> F[JSON, matriks, figure dan audit]
 ```
 
-Mulai dari [petunjuk tiga notebook](notebooks/README.md). Pada Colab atau HPC, atur `DR_RESEARCH_ROOT`, `DR_ARTIFACT_ROOT`, dan `DR_OUTPUT_ROOT` ke lokasi yang benar; sediakan data dan snapshot resmi secara berizin di luar Git. Dependensi training perlu disesuaikan dengan environment sumber dan diverifikasi versinya. Perangkat/library yang berbeda dapat mengubah hasil numerik, sehingga notebook tidak menjanjikan kesetaraan bitwise lintas mesin.
+Mulai dari [petunjuk notebook](notebooks/README.md). Untuk eksekusi opsional, siapkan data berizin, manifest beku dan snapshot resmi di luar Git, lalu ikuti pengaturan path serta dependensi di notebook masing-masing. Perangkat dan versi pustaka dapat mengubah hasil numerik.
 
 
 Reproduksi parsial yang dipandu paper [CAD-ViT (2025)](https://doi.org/10.1109/ACCESS.2025.3572455) disajikan dalam [ikhtisar riset utama](CAD_ViT.ipynb). Tiga catatan eksperimen di bawah memuat tabel training, matriks, interpretasi, dan provenance; notebook utama merangkum enam hasil final test tanpa sel kode. [Notebook asli 105 sel](reproduction/archive/CAD_ViT_original_105_cells.ipynb) mempertahankan seluruh implementasi V1/V2, output, attachment, dan penomoran historis. Mulai kolaborasi dari [panduan kolaborator](docs/COLLABORATOR_GUIDE.md). EDA historis pada arsip §2.2 belum dapat ditautkan pasti ke manifest training V2; grafik APTOS lokal arsip §2.3 memakai pasangan label–gambar yang diperiksa terpisah.
@@ -37,7 +37,7 @@ Rujukan ke sel kode atau nomor bagian lama dalam catatan di bawah menunjuk ke **
 
 ## Studi ConvNeXt-Tiny B0–B4 (terpisah dari reproduksi CAD-ViT)
 
-[Notebook riset novelty](CAD_ViT_Novelty.ipynb) memuat laporan lengkap sepuluh run ConvNeXt-Tiny 20 epoch pada **validasi**: perbandingan agregat, precision/recall/F1/support tiap grade, QWK, weighted-F1, confusion matrix, learning curves, seluruh tabel epoch, dan interpretasi. [Bukti JSON dan figur](novelty/convnext_b0_b4/validation_evidence.json) menyimpan 200 catatan epoch asli beserta hash sumber/figur. [Dokumen kesiapan](docs/FOUNDATION_TRAINING_READINESS.md) memuat kontrol eksperimen, keterbatasan, dan rencana benchmark CPU. Bagian ini bukan hasil CAD-ViT P1–P4 dan bukan final test.
+[Notebook baseline per dataset](notebooks/README.md#baseline-convnext-tiny-b0b4) memuat sepuluh run 20 epoch pada **validasi**. [Bukti JSON dan figur](novelty/convnext_b0_b4/validation_evidence.json) menyimpan 200 epoch asli beserta hash sumber dan figur. [Protokol P1–P4](docs/CADVIT_NOVELTY_PROTOCOL.md) mencatat prototipe CAD-ViT sebagai jalur penelitian terpisah.
 
 | Dataset | Arm | Best epoch | Validation macro-F1 | QWK |
 | --- | --- | ---: | ---: | ---: |

@@ -1,20 +1,36 @@
-# Tiga studi penelitian — urutan baca dan eksekusi
+# Notebook penelitian CAD-ViT dan ConvNeXt
 
-| Urutan | Notebook utama | Bukti dan cakupan |
-| --- | --- | --- |
-| 01 | [Reproduksi CAD-ViT](01_CAD_ViT_Reproduction.ipynb) | V1, V2 BG10, balanced APTOS, DDR recovery; hasil validasi dan final test asli, reproduksi parsial terhadap paper. |
-| 02 | [ConvNeXt B0–B4](02_ConvNeXt_B0_B4_Validation.ipynb) | Sepuluh run 20 epoch, 200 catatan epoch, kurva dan matriks validasi. B3/B4 historical runner berada di luar Git. |
-| 03 | [ConvNeXt E5](03_ConvNeXt_E5_APTOS2019.ipynb) | Snapshot penelitian APTOS integrated dan final test historis. [Laporan hasil terbaru](../docs/E5_E6_VALIDATION.md) mencakup validasi 20 epoch APTOS2019 dan DDR. |
+Gunakan notebook sesuai model, dataset, dan eksperimen. Tabel statis bersumber dari artefak terkomit. Confusion matrix yang tersedia pada notebook ConvNeXt sudah tersimpan sebagai output gambar dan dapat dibaca tanpa menjalankan kernel.
 
-**Tindak lanjut Studi 03:** [E6 boundary-aware ConvNeXt-Tiny](03_ConvNeXt_E6_Boundary_Aware.ipynb) mendokumentasikan rancangan LDAM-DRW, supervisi ordinal, batas grade berdekatan, dan cache RGB train. [Laporan validasi E5–E6](../docs/E5_E6_VALIDATION.md) menyediakan hasil empat run yang selesai, grafik publikasi, dan audit bukti. Status yang tertulis di dalam notebook mencerminkan waktu penyusunannya. [Protokol dan perintah HPC](../novelty_integrated/e6/README.md) mendokumentasikan eksekusi E6.
+## Reproduksi CAD-ViT
 
-Ketiga notebook memuat Markdown ilmiah dan kode Python yang membaca artefak terkomit, memeriksa dependensi/provenance, serta menunjukkan jalur source asli untuk preflight, smoke, dan training. `RUN_PREFLIGHT`, `RUN_SMOKE`, dan `RUN_TRAINING` selalu `False` saat notebook dibuka. Tidak ada sel yang menjalankan final-test inference. Figure terkomit tampil langsung di GitHub tanpa kernel. Kode yang memerlukan dataset, manifest, snapshot model, atau checkpoint luar repository menampilkan `SKIPPED_MISSING_DATA` sampai input asli tersedia.
+[CAD-ViT Reproduction](reproduction/CAD_ViT_Reproduction.ipynb) mendokumentasikan kandidat reproduksi, V1, V2 BG10, balanced APTOS, DDR recovery, dan pemisahan validasi dari final test. [Arsip asli 105 sel](../reproduction/archive/CAD_ViT_original_105_cells.ipynb) dan [tiga laporan kampanye](../reproduction/experiments/) tetap menjadi sumber historis. Prototipe P1–P4 memiliki [protokol dan snapshot arsip tersendiri](../docs/CADVIT_NOVELTY_PROTOCOL.md).
 
-## Persiapan Colab atau HPC
+## Baseline ConvNeXt-Tiny B0–B4
 
-1. Clone branch `salma`, buka notebook berurutan dengan Python 3. Untuk inspeksi hasil, cukup Python, Jupyter/IPython dan `nbformat`; Matplotlib opsional karena figure asli sudah tersemat. Untuk model/training gunakan environment sumber yang kompatibel dengan PyTorch, torchvision, Transformers **4.57.3** (E5), Pillow, NumPy, serta dependensi modul terkait. Belum ada lockfile lintas Colab/HPC; catat versi paket dan perangkat aktual sebelum membandingkan run.
-2. Set `DR_RESEARCH_ROOT` ke checkout, `DR_ARTIFACT_ROOT` ke root artefak berizin, dan `DR_OUTPUT_ROOT` ke direktori run baru **di luar Git**. Di Colab, Drive mount bersifat opsional dan perlu diaktifkan secara eksplisit.
-3. Sediakan manifest seed-42 dan sidecar asli, gambar train/validation yang sah, serta snapshot resmi dan SHA-256 yang cocok. Notebook tidak mengunduh data/weights. Jalankan preflight sumber sebelum mengaktifkan smoke atau training. Jangan arahkan output ke run historis, checkpoint aktif DDR, atau dataset mentah.
-4. Final test historis APTOS E5 didokumentasikan di [`test_summary.json`](../results/APTOS2019/e5_integrated/test_summary.json). Seluruh perbandingan dalam [laporan E5–E6](../docs/E5_E6_VALIDATION.md) memakai split validasi.
+| Eksperimen | APTOS2019 | DDR | Bukti |
+| --- | --- | --- | --- |
+| B0 vanilla | [Notebook](baselines/B0_APTOS2019.ipynb) | [Notebook](baselines/B0_DDR.ipynb) | Dua run 20 epoch, ordinary CE. |
+| B1 augmentasi | [Notebook](baselines/B1_APTOS2019.ipynb) | [Notebook](baselines/B1_DDR.ipynb) | Dua run 20 epoch, augmentasi konservatif train-only. |
+| B2 weighted CE | [Notebook](baselines/B2_APTOS2019.ipynb) | [Notebook](baselines/B2_DDR.ipynb) | Dua run 20 epoch, bobot kelas dari train. |
+| B3 sampling grade 3 | [Notebook](baselines/B3_APTOS2019.ipynb) | [Notebook](baselines/B3_DDR.ipynb) | Dua run 20 epoch, runner historis eksternal. |
+| B4 seleksi data | [B4-Q dan B4-R](baselines/B4_APTOS2019.ipynb) | [Mengapa tidak berlaku](baselines/B4_DDR.ipynb) | Dua run APTOS 20 epoch, nol run DDR. |
 
-Untuk riwayat yang tidak dapat direkonstruksi dari Git saja, baca [audit konsolidasi](../docs/RESEARCH_CONSOLIDATION_AUDIT.md), [arsip CAD-ViT 105 sel](../reproduction/archive/CAD_ViT_original_105_cells.ipynb), dan [panduan kolaborator](../docs/COLLABORATOR_GUIDE.md). Gambar fundus APTOS lokal yang belum memiliki izin redistribusi tetap di luar Git.
+[Bukti agregat B0–B4](../novelty/convnext_b0_b4/validation_evidence.json) memuat 200 epoch. B0–B2 menyediakan alur opsional untuk run baru melalui modul resmi. B3/B4 merekam metode dan bukti yang tersedia, termasuk batas reproduksi akibat runner eksternal.
+
+## Eksperimen E5–E7
+
+| Eksperimen | APTOS2019 | DDR | Bukti |
+| --- | --- | --- | --- |
+| E5 Integrated | [Notebook](novelty/E5_APTOS2019.ipynb) | [Notebook](novelty/E5_DDR.ipynb) | Dua run 20 epoch dengan validasi terverifikasi. Final test historis APTOS memiliki [laporan terpisah](../results/APTOS2019/e5_integrated/README.md). |
+| E6 Boundary-Aware | [Notebook](novelty/E6_APTOS2019.ipynb) | [Notebook](novelty/E6_DDR.ipynb) | Dua run 20 epoch dengan validasi terverifikasi. |
+| E7 Global/Local | [Notebook](novelty/E7_APTOS2019.ipynb) | [Notebook](novelty/E7_DDR.ipynb) | Protokol dan runner tersedia. Hasil dan status HPC saat ini belum terverifikasi dalam checkout ini. |
+
+[Laporan E5–E6](../docs/E5_E6_VALIDATION.md) menyediakan 80 epoch dan indeks figur publikasi. [Inventaris eksperimen](../docs/NOTEBOOK_EXPERIMENT_AUDIT.md) menghubungkan source, checksum, bukti, dan snapshot notebook yang sudah dipensiunkan. [Audit backend dan pruning](../docs/OPTIMIZATION_COMPATIBILITY.md) membedakan catatan optimasi historis pada branch `novelty` dari rancangan evaluasi berikutnya di `salma`.
+
+## Membaca dan mereproduksi
+
+- Bukti statis memerlukan browser saja. Untuk mengeksekusi sel pembacaan artefak secara lokal, gunakan Jupyter/IPython dengan Python 3.11 atau lebih baru.
+- Untuk workflow opsional, gunakan lingkungan dan versi dependensi pada protokol terkait. Atur `DR_RESEARCH_ROOT` bila notebook dijalankan dari luar checkout, `DR_ARTIFACT_ROOT` untuk manifest dan data berizin, serta `DR_CONVNEXT_SNAPSHOT` untuk snapshot lokal. Notebook ConvNeXt memakai `DR_NOTEBOOK_RUN_DIR` sebagai area output baru di luar Git. Notebook reproduksi memakai pengaturan path sendiri yang dijelaskan di dalamnya.
+- Sakelar opsional mati secara default. Pilih satu tahap yang didukung, aktifkan sakelarnya, dan gunakan cache serta output sesuai protokol. Untuk E7 gunakan hanya path keluaran baru di bawah `foundation_e7` dan periksa kuota serta alokasi GPU sebelum workflow opsional. Sel notebook tidak menawarkan final-test inference, pruning, atau export.
+- Untuk meregenerasi 16 notebook dataset dari bukti terkomit, jalankan `python notebooks/build_experiment_notebooks.py` dari root checkout dengan `nbformat` terpasang. Generator membaca JSON dan figur yang sudah ada, tanpa menjalankan model.

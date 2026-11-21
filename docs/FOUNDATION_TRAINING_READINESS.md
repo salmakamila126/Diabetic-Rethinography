@@ -2,7 +2,7 @@
 
 ## Verified KC B0–B4 validation update (19 November 2026)
 
-The 16 November audit below is retained as a **historical snapshot** of the evidence then available; its “B0 operator-reported” and “B1/B2 not run” wording is superseded by this section. Ten completed 20-epoch ConvNeXt-Tiny runs now have independently inspected KC `run.json`, `history.json`, `summary.json`, and best-checkpoint sidecars. All 10 best checkpoint binaries matched their sidecar SHA-256; all 200 original epoch objects are preserved in [validation evidence](../novelty/convnext_b0_b4/validation_evidence.json). The [novelty notebook](../CAD_ViT_Novelty.ipynb) provides per-class tables, confusion matrices, curves, and interpretation. These are **validation** results only; no ConvNeXt final-test result is reported.
+The 16 November audit below is retained as a **historical snapshot** of the evidence then available; its “B0 operator-reported” and “B1/B2 not run” wording is superseded by this section. Ten completed 20-epoch ConvNeXt-Tiny runs now have independently inspected KC `run.json`, `history.json`, `summary.json`, and best-checkpoint sidecars. All 10 best checkpoint binaries matched their sidecar SHA-256; all 200 original epoch objects are preserved in [validation evidence](../novelty/convnext_b0_b4/validation_evidence.json). The [baseline notebooks](../notebooks/README.md#baseline-convnext-tiny-b0b4) provides per-class tables, confusion matrices, curves, and interpretation. These are **validation** results only; no ConvNeXt final-test result is reported.
 
 | Dataset | Arm | Best epoch | Accuracy | Macro-F1 | Weighted-F1 | QWK | Grade MAE |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |

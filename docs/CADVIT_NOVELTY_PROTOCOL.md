@@ -4,6 +4,8 @@ Status: implementation and CPU checks only. This is an ablatable research
 prototype, not a verified novel method or a performance result. The historical
 reproduction under reproduction/cadvit/ is imported without modification.
 
+The former root notebook is preserved as a [pinned historical snapshot](https://github.com/salmakamila126/Diabetic-Rethinography/blob/027e586f607bde4877b395ca566082c713340e8b/CAD_ViT_Novelty.ipynb). Its first 21 cells retain the programmatic topology probe, exact example commands, prior art, exploratory status and resource caveats. The prototype adds P1 local contrast, P2 ordinary dilation-branch gating, P3 local ordinal probes with optional attention modulation, and P4 global ordinal supervision. P3 modulation must be compared with the matched probe-only arm. The archived notebook reports no validated P1–P4 performance result. See the [migration and evidence audit](NOTEBOOK_EXPERIMENT_AUDIT.md) for the separate active ConvNeXt notebooks.
+
 ## Baseline and checkpoint transfer
 
 The baseline is CADViTCandidate in reproduction/cadvit/model.py with 5,282,101
@@ -414,7 +416,7 @@ during Phase 3B.
 ## Phase 3C — independent CPU audit and corrections
 
 Relative to baseline commit `e280340`, only the novelty cache module, pilot
-runner, two CAD-ViT test files, this protocol, and `CAD_ViT_Novelty.ipynb`
+runner, two CAD-ViT test files, this protocol, and the historical [P1–P4 notebook snapshot](https://github.com/salmakamila126/Diabetic-Rethinography/blob/027e586f607bde4877b395ca566082c713340e8b/CAD_ViT_Novelty.ipynb)
 are involved. Reproduction, foundation, manifests, checkpoints, and completed
 pilot outputs are unchanged. Three cache defects were reproduced and fixed:
 a valid JSON list caused an uncaught `AttributeError` instead of repair; an

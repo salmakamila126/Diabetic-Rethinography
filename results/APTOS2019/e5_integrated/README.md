@@ -15,7 +15,7 @@ Model: official pretrained ConvNeXt-Tiny + categorical/ordinal heads, full fine-
 
 ![Test confusion matrix](test_confusion_matrix.svg)
 
-Sumber: [run.json](run.json), [history.csv](history.csv), [summary.json](summary.json), [protocol.json](protocol.json), [test_summary.json](test_summary.json); [notebook analisis](../../../notebooks/03_ConvNeXt_E5_APTOS2019.ipynb).
+Sumber: [run.json](run.json), [history.csv](history.csv), [summary.json](summary.json), [protocol.json](protocol.json), [test_summary.json](test_summary.json); [notebook analisis](../../../notebooks/novelty/E5_APTOS2019.ipynb).
 
 Final test = **366** images; Grade 3 correct=4/19, F1=0.25. Ada 15 tambahan kemunculan SHA-256/group duplicate **di dalam** frozen test (tidak ada cross-split overlap train/validation–test menurut audit); test tidak diubah. Tidak ada klaim bahwa E5 mengungguli baseline tanpa ablation/matched protocol. Binary checkpoints tidak ada dalam Git.
 
