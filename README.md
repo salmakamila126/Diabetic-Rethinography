@@ -6,9 +6,11 @@ Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak 
 
 1. [Reproduksi CAD-ViT](notebooks/reproduction/CAD_ViT_Reproduction.ipynb) mencakup fidelity terhadap paper, V1, V2, dan balanced/recovery.
 2. [ConvNeXt B0–B4 per dataset](notebooks/README.md#baseline-convnext-tiny-b0b4) mencakup 10 run validasi dengan histori dan figur asli.
-3. [ConvNeXt E5–E7 per dataset](notebooks/README.md#eksperimen-e5e7) memuat empat run E5/E6 dan validasi E7 APTOS2019 yang telah diaudit. Status DDR E7 masih menunggu bukti.
+3. [ConvNeXt E5–E7 per dataset](notebooks/README.md#eksperimen-e5e7) memuat empat run E5/E6, E7 APTOS2019 dengan 20 epoch, serta [E7 DDR parsial](results/DDR/e7_global_local/validation_report.md) yang berhenti setelah 10 epoch.
 
 Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) memuat perbandingan checkpoint, kurva lengkap, matriks kebingungan, metrik per grade, dan audit provenance. [Audit eksperimen dan snapshot lama](docs/NOTEBOOK_EXPERIMENT_AUDIT.md) mencatat pemindahan notebook. [Audit optimasi](docs/OPTIMIZATION_COMPATIBILITY.md) memisahkan benchmark historis ConvNeXtV2 dari protokol usulan untuk model di `salma`.
+
+[Audit provenance visualisasi](docs/FIGURE_PROVENANCE_AUDIT.md) menghubungkan setiap figur yang dipublikasikan dan output gambar notebook ke data, generator, serta batas verifikasinya.
 
 Notebook menggabungkan narasi ilmiah, pemeriksaan provenance dan tabel dari artefak terkomit. Semua aksi opsional dimatikan saat dibuka. Jika source eksekusi historis tersedia, notebook memanggil modul asli dengan sakelar eksplisit. Bukti reproduksi asli dan keterbatasannya tersedia dalam [audit konsolidasi historis](docs/RESEARCH_CONSOLIDATION_AUDIT.md).
 
@@ -18,6 +20,7 @@ Notebook menggabungkan narasi ilmiah, pemeriksaan provenance dan tabel dari arte
 | 02 ConvNeXt B0–B4 | Bagaimana intervensi training konvensional memengaruhi validasi? | APTOS B4-R 0,707897; DDR B1 0,652146 | **Tidak ada klaim final test B0–B4** | B0–B2 punya runner tracked; B3/B4 source historis eksternal. |
 | 03 ConvNeXt E5 | Apakah auxiliary ordinal dan delayed weighting layak diuji bersama? | APTOS 0,705791 (epoch 16), DDR 0,653199 (epoch 18) | [APTOS one-time final test](results/APTOS2019/e5_integrated/test_summary.json), macro-F1 0,640456 | Kedua run integrated tercakup dalam [audit validasi E5–E6](docs/E5_E6_VALIDATION.md). |
 | 03 ConvNeXt E6 | Bagaimana LDAM, delayed weighting dan penalti batas grade berdekatan mengubah kesalahan? | APTOS 0,679204 (epoch 15), DDR 0,662455 (epoch 12) | Ringkasan training mencatat final test belum diakses saat run selesai | [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) mencakup kedua run E6. |
+| 03 ConvNeXt E7 | Bagaimana satu view global dan dua view lokal mengubah hasil grading? | APTOS 0,696492 (epoch 19, 20 epoch selesai), DDR 0,668563 (epoch 2, 10 dari 20 epoch selesai) | `NOT_ACCESSED` untuk E7 | [Laporan APTOS2019](results/APTOS2019/e7_global_local/validation_report.md) dan [perbandingan DDR E5/E6/E7](results/DDR/e7_global_local/validation_report.md#selected-validation-checkpoint). |
 
 ```mermaid
 flowchart LR

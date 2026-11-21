@@ -82,9 +82,21 @@ def notebook(job, entry):
 The published validation macro-F1 is **{val['macro_f1']:.6f}**. It documents checkpoint selection and is separate from new CPU FP32 measurements.
 [Published validation evidence](../../{entry.evidence_path})"""
     else:
-        origin = ("**PENDING_TRAINING.** The registry has no audited completed E7 DDR receipt. "
-                  "Preparation and timing remain blocked until completed evidence is integrated. "
-                  "[E7 DDR research protocol](../novelty/E7_DDR.ipynb)")
+        partial = ROOT / "results/DDR/e7_global_local/validation_evidence.json"
+        if job == "E7_DDR" and partial.is_file():
+            import json
+
+            record = json.loads(partial.read_text(encoding="utf-8"))
+            best = record["summary"]["best"]
+            origin = ("**PARTIAL / EARLY STOPPED AT EPOCH 10.** The research evidence records ten completed epochs. "
+                      f"The selected epoch {best['epoch']} has DDR validation macro-F1 {best['validation']['macro_f1']:.9f}. "
+                      "The aggregate ZIP does not supply a verified binary or an eligible optimization receipt. "
+                      "Preparation, parity, recovery, and timing remain `NOT_RUN`. "
+                      "[E7 DDR validation evidence](../../results/DDR/e7_global_local/validation_report.md).")
+        else:
+            origin = ("**PENDING_TRAINING.** The registry has no audited completed E7 DDR receipt. "
+                      "Preparation and timing remain blocked until completed evidence is integrated. "
+                      "[E7 DDR research protocol](../novelty/E7_DDR.ipynb)")
     if entry.external_source:
         origin += ("\n\nThe HPC audit requires an independently supplied external source directory with the exact receipt files: "
                    + ", ".join(f"`{name}`" for name, _ in entry.external_source) + ".")

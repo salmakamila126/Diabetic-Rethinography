@@ -73,7 +73,11 @@ class ResearchNotebookIntegrity(unittest.TestCase):
                 self.assertNotIn("--execute-final-test", cell.source)
                 self.assertNotIn("pip install", cell.source)
             source = "\n".join(cell.source for cell in code_cells)
-            if name == REPRODUCTION or NOTEBOOKS[name][0] in ("B0","B1","B2","E5","E6","E7"):
+            if name == "novelty/E7_DDR.ipynb":
+                self.assertNotIn("run_step", source)
+                self.assertNotIn("RUN_TRAINING", source)
+                self.assertEqual(notebook.metadata.research.epoch_records, 10)
+            elif name == REPRODUCTION or NOTEBOOKS[name][0] in ("B0","B1","B2","E5","E6","E7"):
                 self.assertIn("RUN_TRAINING = False", source)
             if name != REPRODUCTION and NOTEBOOKS[name][0] in ("B3","B4"):
                 self.assertNotIn("run_step", source)
@@ -150,7 +154,7 @@ class ResearchNotebookIntegrity(unittest.TestCase):
                 cell.id = f"{arm.lower()}-{dataset.lower()}-{i:02}"
             self.assertEqual(actual, expected, path)
             totals[arm[0]] += actual.metadata.research.epoch_records
-        self.assertEqual(totals, {"B":200,"E":100})
+        self.assertEqual(totals, {"B":200,"E":110})
 
     def test_e5_validation_and_locked_test_are_distinct(self):
         base = "results/APTOS2019/e5_integrated/"

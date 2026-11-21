@@ -253,8 +253,8 @@ def experiment(method, dataset, baseline):
         runs = [read(evidence)]
         fallback = {}
         checkpoint = runs[0]["checkpoint_sidecars"]["best.pt"]["sha256"]
-    elif method == "E7" and dataset == "APTOS2019":
-        folder = "results/APTOS2019/e7_global_local"
+    elif method == "E7" and (ROOT / f"results/{dataset}/e7_global_local/validation_evidence.json").is_file():
+        folder = f"results/{dataset}/e7_global_local"
         evidence = f"{folder}/validation_evidence.json"
         runs = [read(evidence)]
         checkpoint = runs[0]["checkpoint_sidecars"]["best.pt"]["sha256"]
@@ -266,10 +266,16 @@ def experiment(method, dataset, baseline):
                          "input_transport":{"num_workers":2,"persistent_workers":True,"prefetch_factor":2,"pin_memory":True},
                          "e5_checkpoint_sha256":e5["checkpoint_sidecars"]["best.pt"]["sha256"]})
 
-    completed_e7 = method == "E7" and bool(runs)
+    published_e7 = method == "E7" and bool(runs)
+    partial_e7 = published_e7 and dataset == "DDR"
+    completed_e7 = published_e7 and not partial_e7
     hypothesis = ("The full 384 px field and two 224 px detail views test whether retaining more local information changes grade predictions. "
                   "The audited APTOS2019 run completed 20 epochs and selected epoch 19 by validation macro-F1."
                   if completed_e7 else HYPOTHESES[method])
+    if partial_e7:
+        hypothesis = ("**PARTIAL / EARLY STOPPED AT EPOCH 10.** E7 tests whether the full 384 px field and two 224 px detail views "
+                      "change diabetic-retinopathy grading. The hypothesis is that they improve validation macro-F1. "
+                      "The run stopped during epoch 11. The best completed checkpoint is epoch 2, selected on frozen validation.")
     top = [md(f"# {method} — {dataset}\n\n{hypothesis}\n\n"
               "[Notebook index](../README.md) · [Experiment audit](../../docs/NOTEBOOK_EXPERIMENT_AUDIT.md)")]
     if baseline_method:
@@ -323,7 +329,7 @@ def experiment(method, dataset, baseline):
         setup = SETUP + f"\nMETHOD, DATASET = {method!r}, {dataset!r}\nEVIDENCE = {evidence!r}\n"
         setup += (f"blob = json.loads((ROOT / EVIDENCE).read_text(encoding='utf-8'))\nRUNS = {display_expr}\n"
                   "CONFIG = RUNS[0]['configuration'] if RUNS else {}\n")
-        if completed_e7:
+        if published_e7:
             setup += ("CONFIG = {**CONFIG, 'e5_checkpoint_sha256': CONFIG['init']['checkpoint_sha256'],\n"
                       "          'input_transport': {key: CONFIG[key] for key in\n"
                       "              ('workers', 'persistent_workers', 'prefetch_factor', 'pin_memory')}}\n")
@@ -351,6 +357,27 @@ def experiment(method, dataset, baseline):
                     saved_figure(path),
                     md("The next output displays the original train and validation learning curves. Metric coverage follows the corresponding recorded history."),
                     saved_figure(curve)]
+        elif partial_e7:
+            from docs.e7_ddr_publication import comparison_table as partial_comparison
+
+            cfg = record["configuration"]
+            top += [md("### Protocol and checkpoint provenance\n\n"
+                       f"Warm-started from DDR E5 epoch {cfg['init']['checkpoint_epoch']} (`{cfg['init']['checkpoint_sha256']}`). "
+                       "Training used B1 augmentation, BF16, raw weights, AdamW and effective batch 32. The objective adds 0.25 ordinal BCE to categorical CE. "
+                       "The scheduled inverse-square-root class weighting at epoch 11 never activated in a completed epoch. "
+                       "Selection maximized validation macro-F1, then favored lower validation categorical CE and the earlier epoch. "
+                       "The best archive records two epochs and the last archive records ten. The published SHA-256 values are exported receipts. "
+                       f"[Full provenance](../../{folder}/validation_report.md#provenance-and-limitations) · [All epoch fields](../../{folder}/history.csv).")]
+            for figure, explanation in (
+                    ("losses", "Training loss is the total objective. Validation loss is categorical CE. Both show epochs 1–10 and mark epoch 2."),
+                    ("epoch_scores", "Accuracy, macro-F1 and QWK are plotted for train and validation. All points come from the recorded history."),
+                    ("confusion", "The best validation checkpoint is epoch 2. Rows are true grades and columns are predictions. Normalization divides each row by its support."),
+                    ("grade_errors", "Grade 1 has the smallest F1. Of the 63 validation images with true grade 1, 19 moved down to grade 0 and 33 moved up to grade 2."),
+                    ("e5_e6_e7_comparison", "The three selected checkpoints use the same 1,252 frozen validation images. E7 used ten completed epochs.")):
+                top += [md(f"### {figure.replace('_', ' ').capitalize()}\n\n{explanation} "
+                           f"[SVG source view](../../docs/figures/ddr_e7_{figure}.svg)."),
+                        saved_figure(f"docs/figures/ddr_e7_{figure}.png")]
+            top += [md("### E5, E6 and partial E7 validation comparison\n\n" + partial_comparison(record))]
         elif completed_e7:
             from docs.e7_publication import comparison_table
 
@@ -402,15 +429,25 @@ def experiment(method, dataset, baseline):
                       "This comparison provides no significance test or conclusion about clinical performance. "
                       "No E7 final-test result is reported."
                       if completed_e7 else interpret(method, dataset, baseline, runs))
+    if partial_e7:
+        interpretation = ("E7 leads the three selected DDR checkpoints in macro-F1 and accuracy. E5 retains higher QWK. E7 grade 1 recall is 11/63, "
+                          "below E5 and E6. Grade 3 recall is 11/24, tied with E6 and below E5. E7 recorded 99 overgraded and 109 undergraded predictions. "
+                          "Train loss fell while validation CE rose after epoch 2. Checkpoints were selected on the same validation split, "
+                          "and training budgets and objectives differ. These are descriptive findings from one run per method. Final test remains NOT_ACCESSED.")
     top += [md("## Interpretation and limits\n\n" + interpretation + "\n\n" + (
         "Use the [E5–E6 comparison](../../docs/E5_E6_VALIDATION.md) for the dataset-specific trade-offs, including "
         "grade 1 false positives, grade 3 recall, and the confidence-scale audit. Validation selected the best epoch, so "
         "single-run differences are descriptive." if method in INTEGRATED else
-        f"[Full validation report and figure index](../../{folder}/validation_report.md)." if completed_e7 else
+        f"[Full validation report and figure index](../../{folder}/validation_report.md)." if published_e7 else
         "Do not infer a gain from geometry or multi-view fusion before validation artifacts are verified." if method=="E7" else
         "Screening comparisons share validation data and need independent confirmation. A selected checkpoint is not a final-test result. "
         "See the [baseline rationale and audit](../../docs/NOTEBOOK_EXPERIMENT_AUDIT.md#b0b4-mapping)."))]
-    if method in ("B3","B4"):
+    if partial_e7:
+        top += [md("## Reproduce the report\n\nThe notebook only reads committed aggregate results and optionally checks hashes. "
+                   "The figure generator reads the same ten epoch objects. From the repository root, run "
+                   "`python -m docs.e7_ddr_publication --figures ../e7-ddr-rendered` into a fresh directory. "
+                   "See the [figure and source audit](../../docs/FIGURE_PROVENANCE_AUDIT.md).")]
+    elif method in ("B3","B4"):
         top += [md("## Execution availability\n\nThe original external orchestration and input selection are prerequisites for a historical rerun. The signed-off "
                    "reporting path reads aggregate evidence only. There is no substitute training cell for these arms.")]
     else:

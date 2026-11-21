@@ -12,7 +12,7 @@ The [research notebooks](../README.md) document original runs. This directory ho
 | B4-R | [Notebook](B4-R_APTOS2019.ipynb) | Not applicable |
 | E5 | [Priority 1](E5_APTOS2019.ipynb) | [Priority 4](E5_DDR.ipynb) |
 | E6 | [Priority 2](E6_APTOS2019.ipynb) | [Priority 5](E6_DDR.ipynb) |
-| E7 | [Priority 3](E7_APTOS2019.ipynb) | [Pending receipt](E7_DDR.ipynb) |
+| E7 | [Priority 3](E7_APTOS2019.ipynb) | [Partial training evidence, optimization not run](E7_DDR.ipynb) |
 
 Each Jupyter notebook defaults to read-only. With an external campaign path set, it displays only completed reports that match the job, checkpoint and frozen manifest. GitHub shows the static rationale, receipt and `NOT_RUN` state until measured, sanitized evidence is available for a separate publication review.
 
