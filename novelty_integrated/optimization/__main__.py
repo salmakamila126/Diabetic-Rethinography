@@ -91,21 +91,31 @@ def _plan(args, entry):
 
 
 def _measure_variant(name, model, batches, prepare, plan, output, tensor_digest, *, reference=None,
-                     checked_logits=None):
-    output.mkdir()
+                     checked_logits=None, prepared=None):
+    if prepared is None:
+        output.mkdir()
     example = prepare(batches[0])
     profile = pruning.profile(model, example)
     results = {}
     onnx = None
     for backend in plan["backends"]:
-        info = plan["backend_candidates"][backend]
-        if info["missing_packages"]:
+        info = plan["backend_candidates"][backend] if prepared is None else prepared[backend]
+        if (info["missing_packages"] if prepared is None else info["status"] != "PREPARED"):
             results[backend] = info
             continue
+        if prepared is not None:
+            print(f"{name}/{backend}: verifying ordered validation inputs", flush=True)
         initial_memory = benchmark.memory()
         try:
-            candidate = backends.build(backend, model, example, output, threads=plan["threads"], shared_onnx=onnx)
-            if backend == "onnxruntime":
+            if prepared is None:
+                candidate = backends.build(backend, model, example, output, threads=plan["threads"], shared_onnx=onnx)
+            else:
+                names = ["pixels"] if len(example) == 1 else ["global_pixels", "patch_pixels"]
+                path = output / info["file"]
+                if benchmark.artifact_receipt(path) != info["artifact"]:
+                    raise ValueError("Prepared backend artifact differs")
+                candidate = backends.load(backend, model, path, names, threads=plan["threads"])
+            if prepared is None and backend == "onnxruntime":
                 names = ["pixels"] if len(example) == 1 else ["global_pixels", "patch_pixels"]
                 onnx = (candidate.artifact, names)
             if backend == "eager" and checked_logits is not None:
@@ -121,6 +131,8 @@ def _measure_variant(name, model, batches, prepare, plan, output, tensor_digest,
                       "quality": benchmark.quality(logits, batches),
                       "artifact": benchmark.artifact_receipt(candidate.artifact)}
             if parity["passed"]:
+                if prepared is not None:
+                    print(f"{name}/{backend}: measuring model-only and end-to-end passes", flush=True)
                 timing = {scope: benchmark.time_backend(candidate.infer, batches, prepare,
                            warmup=plan["warmup"], repeats=plan["repeats"], scope=scope)
                           for scope in ("model_only", "end_to_end")}

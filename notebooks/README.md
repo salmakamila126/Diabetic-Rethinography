@@ -1,5 +1,7 @@
 # Notebook penelitian CAD-ViT dan ConvNeXt
 
+[Notebook optimasi per checkpoint](optimization/README.md) memuat protokol dan laporan pengukuran turunan yang terpisah dari notebook penelitian ini.
+
 Gunakan notebook sesuai model, dataset, dan eksperimen. Tabel statis bersumber dari artefak terkomit. Confusion matrix yang tersedia pada notebook ConvNeXt sudah tersimpan sebagai output gambar dan dapat dibaca tanpa menjalankan kernel.
 
 ## Reproduksi CAD-ViT

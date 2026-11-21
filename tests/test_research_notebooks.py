@@ -35,7 +35,8 @@ def read_json(relative: str):
 class ResearchNotebookIntegrity(unittest.TestCase):
     def test_notebook_schema_syntax_and_guarded_actions(self):
         self.assertEqual({p.relative_to(ROOT / "notebooks").as_posix()
-                          for p in (ROOT / "notebooks").rglob("*.ipynb")},
+                          for p in (ROOT / "notebooks").rglob("*.ipynb")
+                          if p.parent.name != "optimization"},
                          {REPRODUCTION, *NOTEBOOKS})
         self.assertFalse((ROOT / "CAD_ViT_Novelty.ipynb").exists())
         for name in (REPRODUCTION, *NOTEBOOKS):

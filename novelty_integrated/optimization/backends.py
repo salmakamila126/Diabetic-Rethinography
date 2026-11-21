@@ -56,11 +56,26 @@ def build(name, model, inputs, output, *, threads, shared_onnx=None):
             traced = torch.jit.freeze(torch.jit.trace(model, inputs, check_inputs=[inputs]))
         path = output / "model.torchscript.pt"
         traced.save(str(path))
+        return load(name, model, path, [], threads=threads)
+
+    path, names = shared_onnx if shared_onnx is not None else export_onnx(model, inputs, output)
+    if name == "openvino":
+        import openvino as ov
+
+        ir_path = output / "model.xml"
+        ov.save_model(ov.Core().read_model(str(path)), str(ir_path), compress_to_fp16=False)
+        path = ir_path
+    return load(name, model, path, names, threads=threads)
+
+
+def load(name, model, path, names, *, threads):
+    """Open verified export artifacts without tracing or rebuilding them."""
+    if name == "eager":
+        return Backend(model, path, {"runtime": "PyTorch eager", "threads": torch.get_num_threads()})
+    if name == "torchscript":
         reloaded = torch.jit.load(str(path), map_location="cpu").eval()
         return Backend(reloaded, path, {"runtime": "PyTorch TorchScript traced/frozen",
                                       "threads": torch.get_num_threads()})
-
-    path, names = shared_onnx if shared_onnx is not None else export_onnx(model, inputs, output)
     if name == "onnxruntime":
         import onnxruntime as ort
 
@@ -82,10 +97,9 @@ def build(name, model, inputs, output, *, threads, shared_onnx=None):
 
     import openvino as ov
 
-    core = ov.Core()
-    ir_path = output / "model.xml"
-    ov.save_model(core.read_model(str(path)), str(ir_path), compress_to_fp16=False)
-    compiled = core.compile_model(str(ir_path), "CPU", {"PERFORMANCE_HINT": "LATENCY",
+    if name != "openvino":
+        raise ValueError(f"Unexpected backend: {name}")
+    compiled = ov.Core().compile_model(str(path), "CPU", {"PERFORMANCE_HINT": "LATENCY",
         "INFERENCE_NUM_THREADS": threads, "NUM_STREAMS": 1, "INFERENCE_PRECISION_HINT": "f32"})
     request = compiled.create_infer_request()
     ordered_ports = [compiled.input(name) for name in names]
@@ -97,6 +111,6 @@ def build(name, model, inputs, output, *, threads, shared_onnx=None):
         inputs_by_port = {port: value.numpy() for port, value in zip(ordered_ports, tensors, strict=True)}
         return request.infer(inputs_by_port, share_outputs=False)[out]
 
-    return Backend(run, ir_path, {"runtime": "OpenVINO", "device": "CPU", "opset": 17,
+    return Backend(run, path, {"runtime": "OpenVINO", "device": "CPU", "opset": 17,
                                   "precision_hint": "f32", "threads": threads,
                                   "streams": 1, "performance_hint": "LATENCY"})

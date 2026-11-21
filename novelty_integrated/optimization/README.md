@@ -95,3 +95,95 @@ python -m unittest tests.test_convnext_optimization -v
 ```
 
 Tests use synthetic tensors, temporary generated images and checkpoint fixtures. Optional backend and library-specific tests are skipped when their package is missing. A synthetic pass does not establish real-checkpoint numerical equivalence, latency or classification quality.
+
+## Staged HPC campaign
+
+Use this workflow for independent optimization notebooks and isolated timings. The original single-command Phase A interface above remains available for development. The staged campaign uses the same checkpoint adapters, pruning, export, numerical agreement, quality evaluation and reporting. The archived [partner experiments](../../docs/OPTIMIZATION_COMPATIBILITY.md) provide context. HF ConvNeXt V1 expansion paths and timm ConvNeXtV2 GRN paths stay distinct.
+
+### Read-only readiness audit
+
+From an **authorized HPC compute allocation or JupyterLab terminal**, open the review checkout with this code available. Use the existing environment. Audits read and hash original files, so avoid running them during a timing window. A directory name and matching archive receipts establish expected identity. This session cannot verify live HPC binary presence or allocated resources from Windows. Run the audit below on the host that will do the work.
+
+```bash
+conda activate convnext-research
+cd "$REVIEW_CHECKOUT"                         # already-provisioned checkout
+export CADVIT_ARTIFACT_ROOT="$HOME/CAD-ViT-Research/Kel_13"
+export CADVIT_OPT_CAMPAIGN="$CADVIT_ARTIFACT_ROOT/optimization_runs/fp32_full_val_v1"
+PYTHON="$(command -v python)"
+"$PYTHON" -m novelty_integrated.optimization.hpc inventory
+
+for job in E5_APTOS2019 E6_APTOS2019 E7_APTOS2019 E5_DDR E6_DDR; do
+  "$PYTHON" -m novelty_integrated.optimization.hpc audit --job "$job" || break
+done
+```
+
+The inventory is a manifest derived from the published registry. It lists per-job checkpoint path, SHA-256, best epoch, frozen manifest and validation count. The audit verifies the original binary and adjacent sidecar, code provenance, official snapshot, frozen manifest and metadata, dependency availability, CPU affinity/quota and available RAM/disk. The default backend set requires PyTorch, ONNX, ONNX Runtime and OpenVINO. An explicitly reduced set such as `--backend eager torchscript` must use a different campaign root and must remain identical across stages. `--checkpoint` and `--snapshot` accept authorized relocated files and retain all digest guards. B3/B4 also require `--external-source-dir` on every stage. E7 DDR rejects execution until a completed receipt is integrated in the registry.
+
+### Allocations and workload
+
+Request approved resources before launch. Set the shell variables below to the scheduler or lab allocation actually assigned, using logical CPU IDs from the affinity audit. Timing requires an exclusive set of physical CPU cores with no competing SMT siblings and an isolated storage window. The CLI checks Linux affinity, cgroup quota when exposed, free RAM and free disk. Its reservation references and flags record operator confirmation. They cannot allocate resources or enforce site-wide isolation.
+
+| Work | Priority pairs | Parallel limit | Conservative resource gate | Measured call count |
+| --- | ---: | ---: | --- | ---: |
+| Export and pruning preparation | 5 | 2 on disjoint allocated CPUs | 2 CPU threads per worker, ≥6 GiB available RAM per worker with ≥12 GiB at launch for two, plan 3 GiB added per pair. The launch guard reserves for two workers (6 GiB) plus a 5 GiB free shared reserve. | None |
+| Original and pruned timing | 5 | 1 | 4 isolated CPU threads, ≥6 GiB available RAM, 1 GiB extra plus reserve, CPU only | APTOS 35,136 per pair, DDR 120,192 per pair |
+| Recovery preparation | 4 eligible priority pairs, E5/E6 | 1 | Separate explicit approval. CPU default. GPU only with an allocated idle UUID, DDR E7 safety confirmed and ≥8 GiB free VRAM as a preflight guard | None |
+| Timing with recovered arms | 4 eligible priority pairs | 1 | Same isolated CPU policy, remeasure original and pruned controls in the same job | Twice the corresponding unrecovered counts |
+| Later B0–B4 | 10 receipts | Same stage limits | Two distinct APTOS B4 arms. B3/B4 require external source receipts. | Same formula by dataset |
+
+Timing counts assume four backends pass compatibility and parity, batch 1, four variants, two scopes and three repetitions. They exclude warm-up, quality checks, preprocessing verification and export. The five priority pairs total **345,792 timed calls**. Available host resources, wall-clock duration and output sizes on HPC are unmeasured. The resource floors are allocation policy, not measured memory demand. Apply explicit lab quota limits in addition to the filesystem free-space guard. Budget about 15 GiB for prepared outputs. Start with 23 GiB free so the last job can still meet the 11 GiB combined launch guard if four preceding pairs each consume 3 GiB. Budget recovery storage separately.
+
+A separate fixed, grade-complete pilot can be run with `--sample-count 100` at a different campaign root. It fails before export if the chosen subset omits a grade. Use the pilot’s raw per-pass latencies to estimate full duration. Multiply each scope and variant’s measured mean call time by the full sample count and repeats, sum across scopes and backends, then add observed per-stage overhead separately. Do not substitute training throughput or historical timings from a different host.
+
+### tmux launch and continuation
+
+Run the helper below in the authorized terminal. The command arguments use the same checkout, environment, campaign path and reviewed Python interpreter. Use a different session name and log for a retry. The helper launches only the command passed to it.
+
+```bash
+logdir="$CADVIT_OPT_CAMPAIGN/logs"
+mkdir -p "$logdir"
+"$PYTHON" -m novelty_integrated.optimization.hpc inventory > "$logdir/jobs.json"
+
+launch_opt() {
+  local session="$1"; shift
+  tmux new-session -d -s "$session" -c "$PWD" -- bash -c '
+    log="$1"; shift
+    "$@" >>"$log" 2>&1
+  ' bash "$logdir/$session.log" env \
+    CADVIT_ARTIFACT_ROOT="$CADVIT_ARTIFACT_ROOT" CADVIT_OPT_CAMPAIGN="$CADVIT_OPT_CAMPAIGN" \
+    "$PYTHON" -m novelty_integrated.optimization.hpc "$@"
+}
+
+: "${PREP_ALLOCATION:?set the approved preparation allocation identifier}"
+: "${PREP_CPUS_A:?set the allocated IDs for worker A}"
+: "${PREP_CPUS_B:?set the distinct allocated IDs for worker B}"
+launch_opt opt-prep-e5a prepare --job E5_APTOS2019 --allocation-id "$PREP_ALLOCATION" --cpus "$PREP_CPUS_A" --threads 2
+launch_opt opt-prep-e6a prepare --job E6_APTOS2019 --allocation-id "$PREP_ALLOCATION" --cpus "$PREP_CPUS_B" --threads 2
+```
+
+Wait for both sessions to exit and verify their logs. Repeat for E7 APTOS2019 and E5 DDR, then E6 DDR. Never launch more than two preparation jobs. Coordinator locks serialize timing and recovery and reject overlapping preparation CPUs and concurrent writers for the same job. They coordinate only processes using this campaign framework on a filesystem with working POSIX locks. Don’t use this workflow on a shared filesystem that cannot provide those locks. Keep DDR E7 and other lab jobs undisturbed.
+
+```bash
+: "${MEASURE_ALLOCATION:?set the exclusive CPU measurement allocation identifier}"
+: "${MEASURE_CPUS:?set the allocated IDs for exclusive timing}"
+launch_opt opt-time-e5a measure --job E5_APTOS2019 --allocation-id "$MEASURE_ALLOCATION" \
+  --cpus "$MEASURE_CPUS" --threads 4 --confirm-isolated-cpu
+```
+
+Run one timing session at a time in priority order. Confirm there are no overlapping preparations or other workloads competing for resources before each timing session. `tmux ls` and `tail -f "$logdir/opt-time-e5a.log"` show activity without touching other sessions. To run directly instead of tmux, replace `launch_opt <session>` with `"$PYTHON" -m novelty_integrated.optimization.hpc`.
+
+Recovery is opt-in and separate from measurement. Start it only after reviewing the unrecovered results and confirming it is safe for DDR E7. This command uses CPU. A GPU allocation also requires `--recovery-device cuda:0 --gpu-uuid <allocated-UUID> --confirm-ddr-e7-safe`. Verify GPU assignment with the lab and avoid a GPU shared with another job.
+
+```bash
+: "${RECOVERY_ALLOCATION:?set the separately approved recovery allocation identifier}"
+: "${RECOVERY_CPUS:?set the allocated IDs for the recovery job}"
+launch_opt opt-recover-e5a recover --job E5_APTOS2019 --allocation-id "$RECOVERY_ALLOCATION" \
+  --cpus "$RECOVERY_CPUS" --threads 4 --authorize-recovery --recovery-epochs 3
+# After this stage completes, use a separate isolated timing session.
+launch_opt opt-post-e5a measure-recovered --job E5_APTOS2019 --allocation-id "$MEASURE_ALLOCATION" \
+  --cpus "$MEASURE_CPUS" --threads 4 --confirm-isolated-cpu
+```
+
+Each pair has a `protocol.json` and independent `prepared/`, `measurement/`, `recovered/` and `post-recovery/` outputs. Repeat the same stage and arguments to continue after interruption. Preparation and recovery reuse completed arms after checking their artifact hashes and protocol. An incomplete arm restarts from its parent. Completed timing directories are write-once. An interrupted timing job measures the pair again to keep comparisons within one allocation. Recovery timing remeasures original, unrecovered and recovered arms together. Backend failures and missing reports remain explicit in JSON. Any changed source, dependency, selection or checkpoint requires a new campaign root. Original checkpoints stay read-only. Temporary or derived weights and logs remain external.
+
+Set `CADVIT_OPT_CAMPAIGN` in JupyterLab to display reviewed reports through the [optimization notebook index](../../notebooks/optimization/README.md). The stage writes `report.json`, `summary.csv`, `comparison.svg`, and `tradeoff.svg` only after a completed measurement. No production results are included in the notebook templates.
