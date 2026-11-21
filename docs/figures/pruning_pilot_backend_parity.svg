@@ -1,0 +1,604 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="583.2pt" height="662.4pt" viewBox="0 0 583.2 662.4" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:description>{"evidence":"results/optimization/pilot_100_v1/validation_evidence.json","rows":[{"argmax_agreement":1.0,"artifact_bytes":111352973,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111381731,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":3.4332275390625e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111810894,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":1.9550323486328125e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":101015501,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101044643,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":1.0967254638671875e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101474653,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":5.7220458984375e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":80302159,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80331191,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":3.874301910400391e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80761220,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":2.0265579223632812e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":59542927,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":59571647,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":3.039836883544922e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":60001431,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_APTOS2019","maximum_absolute_logit_difference":1.1324882507324219e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":111352973,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111381731,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":8.702278137207031e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111810894,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":4.76837158203125e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":101015501,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101044643,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":2.86102294921875e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101474653,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":1.9073486328125e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":80302159,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80331191,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":1.6838312149047852e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80761220,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":8.344650268554688e-07,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":59542927,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":59571647,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":1.5227124094963074e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":60001431,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_APTOS2019","maximum_absolute_logit_difference":4.470348358154297e-07,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":111366823,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111484672,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":5.936622619628906e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":112293906,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":2.4318695068359375e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":101029351,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101147584,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":1.4781951904296875e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101958176,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":5.245208740234375e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":80316009,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80434132,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":7.748603820800781e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":81244738,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":2.86102294921875e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":59556777,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":59674588,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":3.159046173095703e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":60485843,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E7_APTOS2019","maximum_absolute_logit_difference":1.7881393432617188e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":111352973,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111381731,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":9.310245513916016e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111810894,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":4.6253204345703125e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":101015501,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101044643,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":3.4332275390625e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101474653,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":1.33514404296875e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":80302159,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80331191,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":8.463859558105469e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80761220,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":4.0531158447265625e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":59542927,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":59571647,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":7.152557373046875e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":60001431,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E5_DDR","maximum_absolute_logit_difference":1.9073486328125e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":111352973,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111381731,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":1.049041748046875e-05,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":111810894,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":7.510185241699219e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":0},{"argmax_agreement":1.0,"artifact_bytes":101015501,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101044643,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":4.5299530029296875e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":101474653,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":2.5033950805664062e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":10},{"argmax_agreement":1.0,"artifact_bytes":80302159,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80331191,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":2.7418136596679688e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":80761220,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":1.0728836059570312e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":30},{"argmax_agreement":1.0,"artifact_bytes":59542927,"atol":0.0001,"backend":"torchscript","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":0.0,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":59571647,"atol":0.0001,"backend":"onnxruntime","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":2.562999725341797e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50},{"argmax_agreement":1.0,"artifact_bytes":60001431,"atol":0.0001,"backend":"openvino","device":"CPU","job":"E6_DDR","maximum_absolute_logit_difference":1.1324882507324219e-06,"parity_status":"PASS","precision":"FP32","reference":"eager","rtol":0.0001,"sample_count":100,"status":"VALIDATED","target_pruning_percent":50}]}</dc:description>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 662.4
+L 583.2 662.4
+L 583.2 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 122.62524 642.398979
+L 472.892965 642.398979
+L 472.892965 39.722818
+L 122.62524 39.722818
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g clip-path="url(#p9211e7a411)">
+    <image xlink:href="data:image/png;base64,
+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gRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIEacASBGnAEgRpwBIGZNDwCn97fdIkhY1216BHA5A0CNZ20AiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiFnTA8Dp7c+/WQQJP3771fQI4HIGgBrP2gAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQs93245geAl7uPkMaLtv0BOByBoAcz9oAECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AECPOABAjzgAQI84AELOmB4DTcRwWQcLxsE2PAC5nAKjxrA0AMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMeIMADHiDAAx4gwAMWt6ADjdD3ugwsfIPJczAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDEiDMAxIgzAMSIMwDErOkB4PTh6dkiSHj9kZuFeb5CAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIhZ0wPA6ZPXPkUa1mWbHgFczgBQ41kbAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLW9ABwuh+HRZBw9ykS4HIGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoAYcQaAGHEGgBhxBoCYNT0AnN7/tVsECW9e+VlknssZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBixBkAYsQZAGLEGQBi1vQAcPr19z8tgoSvv/h0egRwOQNAjWdtAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAIgRZwCIEWcAiBFnAHho+Qdu4E8G+7hpAgAAAABJRU5ErkJggg==" id="imageb1c860c7d4" transform="scale(1 -1) translate(0 -602.64)" x="122.4" y="-39.6" width="350.64" height="602.64"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="ma03bf39478" d="M 0 0
+L 0 3.5
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#ma03bf39478" x="181.003194" y="642.398979" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="181.003194" y="656.997416" transform="rotate(-0 181.003194 656.997416)">TorchScript</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#ma03bf39478" x="297.759103" y="642.398979" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="297.759103" y="656.997416" transform="rotate(-0 297.759103 656.997416)">ONNX Runtime</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_3">
+      <g>
+       <use xlink:href="#ma03bf39478" x="414.515011" y="642.398979" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="414.515011" y="656.996635" transform="rotate(-0 414.515011 656.996635)">OpenVINO</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_4">
+      <defs>
+       <path id="m8f848eeb3b" d="M 0 0
+L -3.5 0
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="54.789722" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="58.58855" transform="rotate(-0 115.62524 58.58855)">E5 · APTOS2019 · 0%</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_5">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="84.92353" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="88.722358" transform="rotate(-0 115.62524 88.722358)">E5 · APTOS2019 · 10%</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="115.057338" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="118.856166" transform="rotate(-0 115.62524 118.856166)">E5 · APTOS2019 · 30%</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_7">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="145.191146" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="148.989974" transform="rotate(-0 115.62524 148.989974)">E5 · APTOS2019 · 50%</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="175.324954" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="179.123782" transform="rotate(-0 115.62524 179.123782)">E6 · APTOS2019 · 0%</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_9">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="205.458762" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="209.25759" transform="rotate(-0 115.62524 209.25759)">E6 · APTOS2019 · 10%</text>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="235.59257" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_10">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="239.391398" transform="rotate(-0 115.62524 239.391398)">E6 · APTOS2019 · 30%</text>
+     </g>
+    </g>
+    <g id="ytick_8">
+     <g id="line2d_11">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="265.726378" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_11">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="269.525206" transform="rotate(-0 115.62524 269.525206)">E6 · APTOS2019 · 50%</text>
+     </g>
+    </g>
+    <g id="ytick_9">
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="295.860186" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_12">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="299.659015" transform="rotate(-0 115.62524 299.659015)">E7 · APTOS2019 · 0%</text>
+     </g>
+    </g>
+    <g id="ytick_10">
+     <g id="line2d_13">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="325.993994" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_13">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="329.792823" transform="rotate(-0 115.62524 329.792823)">E7 · APTOS2019 · 10%</text>
+     </g>
+    </g>
+    <g id="ytick_11">
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="356.127802" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_14">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="359.926631" transform="rotate(-0 115.62524 359.926631)">E7 · APTOS2019 · 30%</text>
+     </g>
+    </g>
+    <g id="ytick_12">
+     <g id="line2d_15">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="386.26161" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_15">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="390.060439" transform="rotate(-0 115.62524 390.060439)">E7 · APTOS2019 · 50%</text>
+     </g>
+    </g>
+    <g id="ytick_13">
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="416.395419" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_16">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="420.194247" transform="rotate(-0 115.62524 420.194247)">E5 · DDR · 0%</text>
+     </g>
+    </g>
+    <g id="ytick_14">
+     <g id="line2d_17">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="446.529227" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_17">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="450.328055" transform="rotate(-0 115.62524 450.328055)">E5 · DDR · 10%</text>
+     </g>
+    </g>
+    <g id="ytick_15">
+     <g id="line2d_18">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="476.663035" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_18">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="480.461863" transform="rotate(-0 115.62524 480.461863)">E5 · DDR · 30%</text>
+     </g>
+    </g>
+    <g id="ytick_16">
+     <g id="line2d_19">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="506.796843" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_19">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="510.595671" transform="rotate(-0 115.62524 510.595671)">E5 · DDR · 50%</text>
+     </g>
+    </g>
+    <g id="ytick_17">
+     <g id="line2d_20">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="536.930651" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_20">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="540.729479" transform="rotate(-0 115.62524 540.729479)">E6 · DDR · 0%</text>
+     </g>
+    </g>
+    <g id="ytick_18">
+     <g id="line2d_21">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="567.064459" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_21">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="570.863287" transform="rotate(-0 115.62524 570.863287)">E6 · DDR · 10%</text>
+     </g>
+    </g>
+    <g id="ytick_19">
+     <g id="line2d_22">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="597.198267" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_22">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="600.997095" transform="rotate(-0 115.62524 600.997095)">E6 · DDR · 30%</text>
+     </g>
+    </g>
+    <g id="ytick_20">
+     <g id="line2d_23">
+      <g>
+       <use xlink:href="#m8f848eeb3b" x="122.62524" y="627.332075" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_23">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end" x="115.62524" y="631.130903" transform="rotate(-0 115.62524 631.130903)">E6 · DDR · 50%</text>
+     </g>
+    </g>
+   </g>
+   <g id="line2d_24">
+    <path d="M 122.62524 160.25805
+L 472.892965 160.25805
+" clip-path="url(#p9211e7a411)" style="fill: none; stroke: #7e96a8; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_25">
+    <path d="M 122.62524 280.793282
+L 472.892965 280.793282
+" clip-path="url(#p9211e7a411)" style="fill: none; stroke: #7e96a8; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_26">
+    <path d="M 122.62524 401.328514
+L 472.892965 401.328514
+" clip-path="url(#p9211e7a411)" style="fill: none; stroke: #7e96a8; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_27">
+    <path d="M 122.62524 521.863747
+L 472.892965 521.863747
+" clip-path="url(#p9211e7a411)" style="fill: none; stroke: #7e96a8; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 122.62524 642.398979
+L 122.62524 39.722818
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 122.62524 642.398979
+L 472.892965 642.398979
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="57.127613" transform="rotate(-0 181.003194 57.127613)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_25">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="57.127613" transform="rotate(-0 297.759103 57.127613)">3.4e-05  PASS</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="57.127613" transform="rotate(-0 414.515011 57.127613)">2.0e-05  PASS</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="87.261421" transform="rotate(-0 181.003194 87.261421)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="87.261421" transform="rotate(-0 297.759103 87.261421)">1.1e-05  PASS</text>
+   </g>
+   <g id="text_29">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="87.261421" transform="rotate(-0 414.515011 87.261421)">5.7e-06  PASS</text>
+   </g>
+   <g id="text_30">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="117.395229" transform="rotate(-0 181.003194 117.395229)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_31">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="117.395229" transform="rotate(-0 297.759103 117.395229)">3.9e-06  PASS</text>
+   </g>
+   <g id="text_32">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="117.395229" transform="rotate(-0 414.515011 117.395229)">2.0e-06  PASS</text>
+   </g>
+   <g id="text_33">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="147.529037" transform="rotate(-0 181.003194 147.529037)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="147.529037" transform="rotate(-0 297.759103 147.529037)">3.0e-06  PASS</text>
+   </g>
+   <g id="text_35">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="147.529037" transform="rotate(-0 414.515011 147.529037)">1.1e-06  PASS</text>
+   </g>
+   <g id="text_36">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="177.662845" transform="rotate(-0 181.003194 177.662845)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_37">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="177.662845" transform="rotate(-0 297.759103 177.662845)">8.7e-06  PASS</text>
+   </g>
+   <g id="text_38">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="177.662845" transform="rotate(-0 414.515011 177.662845)">4.8e-06  PASS</text>
+   </g>
+   <g id="text_39">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="207.796653" transform="rotate(-0 181.003194 207.796653)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_40">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="207.796653" transform="rotate(-0 297.759103 207.796653)">2.9e-06  PASS</text>
+   </g>
+   <g id="text_41">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="207.796653" transform="rotate(-0 414.515011 207.796653)">1.9e-06  PASS</text>
+   </g>
+   <g id="text_42">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="237.930461" transform="rotate(-0 181.003194 237.930461)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_43">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="237.930461" transform="rotate(-0 297.759103 237.930461)">1.7e-06  PASS</text>
+   </g>
+   <g id="text_44">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="237.930461" transform="rotate(-0 414.515011 237.930461)">8.3e-07  PASS</text>
+   </g>
+   <g id="text_45">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="268.064269" transform="rotate(-0 181.003194 268.064269)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_46">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="268.064269" transform="rotate(-0 297.759103 268.064269)">1.5e-06  PASS</text>
+   </g>
+   <g id="text_47">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="268.064269" transform="rotate(-0 414.515011 268.064269)">4.5e-07  PASS</text>
+   </g>
+   <g id="text_48">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="298.198077" transform="rotate(-0 181.003194 298.198077)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_49">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="298.198077" transform="rotate(-0 297.759103 298.198077)">5.9e-05  PASS</text>
+   </g>
+   <g id="text_50">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="298.198077" transform="rotate(-0 414.515011 298.198077)">2.4e-05  PASS</text>
+   </g>
+   <g id="text_51">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="328.331885" transform="rotate(-0 181.003194 328.331885)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_52">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="328.331885" transform="rotate(-0 297.759103 328.331885)">1.5e-05  PASS</text>
+   </g>
+   <g id="text_53">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="328.331885" transform="rotate(-0 414.515011 328.331885)">5.2e-06  PASS</text>
+   </g>
+   <g id="text_54">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="358.465693" transform="rotate(-0 181.003194 358.465693)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_55">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="358.465693" transform="rotate(-0 297.759103 358.465693)">7.7e-06  PASS</text>
+   </g>
+   <g id="text_56">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="358.465693" transform="rotate(-0 414.515011 358.465693)">2.9e-06  PASS</text>
+   </g>
+   <g id="text_57">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="388.599501" transform="rotate(-0 181.003194 388.599501)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_58">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="388.599501" transform="rotate(-0 297.759103 388.599501)">3.2e-06  PASS</text>
+   </g>
+   <g id="text_59">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="388.599501" transform="rotate(-0 414.515011 388.599501)">1.8e-06  PASS</text>
+   </g>
+   <g id="text_60">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="418.733309" transform="rotate(-0 181.003194 418.733309)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_61">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #ffffff" x="297.759103" y="418.733309" transform="rotate(-0 297.759103 418.733309)">9.3e-05  PASS</text>
+   </g>
+   <g id="text_62">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="418.733309" transform="rotate(-0 414.515011 418.733309)">4.6e-05  PASS</text>
+   </g>
+   <g id="text_63">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="448.867117" transform="rotate(-0 181.003194 448.867117)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_64">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="448.867117" transform="rotate(-0 297.759103 448.867117)">3.4e-05  PASS</text>
+   </g>
+   <g id="text_65">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="448.867117" transform="rotate(-0 414.515011 448.867117)">1.3e-05  PASS</text>
+   </g>
+   <g id="text_66">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="479.000925" transform="rotate(-0 181.003194 479.000925)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_67">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="479.000925" transform="rotate(-0 297.759103 479.000925)">8.5e-06  PASS</text>
+   </g>
+   <g id="text_68">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="479.000925" transform="rotate(-0 414.515011 479.000925)">4.1e-06  PASS</text>
+   </g>
+   <g id="text_69">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="509.134733" transform="rotate(-0 181.003194 509.134733)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_70">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="509.134733" transform="rotate(-0 297.759103 509.134733)">7.2e-06  PASS</text>
+   </g>
+   <g id="text_71">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="509.134733" transform="rotate(-0 414.515011 509.134733)">1.9e-06  PASS</text>
+   </g>
+   <g id="text_72">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="539.268541" transform="rotate(-0 181.003194 539.268541)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_73">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="539.268541" transform="rotate(-0 297.759103 539.268541)">1.0e-05  PASS</text>
+   </g>
+   <g id="text_74">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="539.268541" transform="rotate(-0 414.515011 539.268541)">7.5e-06  PASS</text>
+   </g>
+   <g id="text_75">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="569.402349" transform="rotate(-0 181.003194 569.402349)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_76">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="569.402349" transform="rotate(-0 297.759103 569.402349)">4.5e-06  PASS</text>
+   </g>
+   <g id="text_77">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="569.402349" transform="rotate(-0 414.515011 569.402349)">2.5e-06  PASS</text>
+   </g>
+   <g id="text_78">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="599.536157" transform="rotate(-0 181.003194 599.536157)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_79">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="599.536157" transform="rotate(-0 297.759103 599.536157)">2.7e-06  PASS</text>
+   </g>
+   <g id="text_80">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="599.536157" transform="rotate(-0 414.515011 599.536157)">1.1e-06  PASS</text>
+   </g>
+   <g id="text_81">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="181.003194" y="629.669965" transform="rotate(-0 181.003194 629.669965)">0.0e+00  PASS</text>
+   </g>
+   <g id="text_82">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="297.759103" y="629.669965" transform="rotate(-0 297.759103 629.669965)">2.6e-06  PASS</text>
+   </g>
+   <g id="text_83">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #142a40" x="414.515011" y="629.669965" transform="rotate(-0 414.515011 629.669965)">1.1e-06  PASS</text>
+   </g>
+   <g id="text_84">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans'" transform="translate(199.917853 13.319537)">Backend parity vs PyTorch Eager</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans'" transform="translate(151.178165 27.722818)">60 comparisons · 100% argmax agreement each</text>
+   </g>
+  </g>
+  <g id="axes_2">
+   <g id="patch_5">
+    <path d="M 490.406352 606.238409
+L 516.924103 606.238409
+L 516.924103 75.883388
+L 490.406352 75.883388
+z
+" style="fill: #ffffff"/>
+   </g>
+   <image xlink:href="data:image/png;base64,
+iVBORw0KGgoAAAANSUhEUgAAACUAAALhCAYAAADYeG2IAAAFQElEQVR4nO3cwY0dMRAD0TLB/NP1wcCXU5hjNcAXQpdaml2s/efvv/eQCUJBqL54OCcVhPrw9QtCQajCeignFYQqrId0Ug+dIBSEumfmdD62fZfzPXyCUBDq3r7b+fDtXxAKQt32Xc4XhIJQd9Bv52PPzOV8D50gFIQqrIdyUkGowrsT5aSCUPf23c730AlCQajCejgnhXBUQSgIdc/M7XwPnSAUhCqsh3JSQajbvtP5EH67BKEg1G3f7Xz4BKHuoN/Oh++oB6EgVGE9lJMKQhXWQzmpINS9fbfz4du/IBSEKqyHclJBqMJ6SCf10AlCQah7Zk7nY9t3Od/DJwgFoe7tu50P3/4FoSBUYT2UkwpCFdZDOqmHThAKQt0zczof277L+R4+QSgIdW/f7Xz49i8IBaEK66GcVBCqsB7KSQWh7u37aM/M7YOO8KIKQkGownooJxWEumfmdj58+xeEglCF9VBOKghVWA/lpIJQ9/Z9tGfm9kFHeFEFoSBUYT2UkwpC/QnfmSAUhOqLh3NSQajC5UM5qSDU/YLjdL7ftu+bHfTbB/3toJ/Oh69fEApC3TNzOt/b9p3O99AJQkGoy3c632+X5zc76LcP+ttBP53voROEglD3zJzO97Z9p/PhE4SCUJ9w/YJQEOoPnyDUHfTb+fAJQkGo277T+X74BKEg1G3f8XzoBKEgVGE9lJMKQt0fyX+0g377oD/hOxOEglD3jX463/MtH8pJBaHuK+F0vrftu5zvJ+wXhIJQ90fyH+2eOn7Q2T11ON/z1UM5qSDUPTPH8z1sglAQqrAeykkFoe7yPJ3vCdcvCAWhbvs+2qRuH/S3n5Av5/v5XhmUkwpCFX4koJxUEOp+Qj6eD50gFIS6y/N0vp+wXxCqcFAoJxWEuj8UvJ3v+dYvCAWhCuuhnFQQ6r7RT+d7wvULQkGo276Plu/2pN7uqcv5fvgEoSDUbd/xfOgEoSDU/YLjdL637bud72EThIJQhfVwTuonHFUQCkL1xcM5qSDUPTOn8/2E6xeEglC3fcfzoROEglC3fafz/bZ93+yg3z7oD58gFIS6X3CczveE6xeEglD3kXc8HzpBKAh1b9/pfG/b982emdsH/beDfjnf2/9WcjrfQycIBaHuR6zT+X7bvsv5nvD2DEJBqMJ6KCcVhLpfcHy0g377oD/hRRWEglCF9VBOKgh123c8HzpBKAh12/fR8p2eVBDqLs+Pdk99tYN+elJBqPtKOJ4PnSAUhLrtO54PnSAUhLrtO54PnSDUHfTj+dAJQkGo277j+dAJQkGo276Plu/0pIJQd3kez/ewCUIVDgrlpIJQf8J/TxCEglC3fcfzPWyCUBCqsB7KSQWhbvuO50MnCAWhbvs+2qRuH3R2T13O94TvTBAKQl2+j5bv9KSCULd9p/Phe/pQTioIddv30Sb11Q766UkFoe6ZOZ3v7Sfkb5bv9KSCULd9Hy3f6UkFoe7T5aPdU7cP+ttH3jfLd3pSQah7Zk7ne7s8v1m+05MKQt32fbR8pycVhLpPl492T90+6G8fed8s3+lJBaFu+07nY39pdjnf29v3zfKdnlQQKtu+b8r7YROEglB30I/n+2EThIJQt30fWfNt+z5ZvtOTCkLd5Xk83w+bINQd9OP5ftgEoSDUbd/xfD9sglAQ6rbveL4fNkEoCHXbdzzfD5sgVPaftp/O93bQP1m+05MKQt1XwvF8P2yCUBDqtu94vh82QSgIddv30Q76VzvopycVhLpn5ni+h00QCkLd9h3P97AJQkGo276PlPn+A1I2Hn7uEnAHAAAAAElFTkSuQmCC" id="image5566d32faf" transform="scale(1 -1) translate(0 -530.64)" x="490.32" y="-74.88" width="26.64" height="530.64"/>
+   <g id="matplotlib.axis_3"/>
+   <g id="matplotlib.axis_4">
+    <g id="ytick_21">
+     <g id="line2d_28">
+      <defs>
+       <path id="m470ff8da0c" d="M 0 0
+L 3.5 0
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="606.238409" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_85">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="610.037237" transform="rotate(-0 523.924103 610.037237)">0.00000</text>
+     </g>
+    </g>
+    <g id="ytick_22">
+     <g id="line2d_29">
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="500.167405" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_86">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="503.966233" transform="rotate(-0 523.924103 503.966233)">0.00002</text>
+     </g>
+    </g>
+    <g id="ytick_23">
+     <g id="line2d_30">
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="394.096401" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_87">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="397.895229" transform="rotate(-0 523.924103 397.895229)">0.00004</text>
+     </g>
+    </g>
+    <g id="ytick_24">
+     <g id="line2d_31">
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="288.025396" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_88">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="291.824224" transform="rotate(-0 523.924103 291.824224)">0.00006</text>
+     </g>
+    </g>
+    <g id="ytick_25">
+     <g id="line2d_32">
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="181.954392" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_89">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="185.75322" transform="rotate(-0 523.924103 185.75322)">0.00008</text>
+     </g>
+    </g>
+    <g id="ytick_26">
+     <g id="line2d_33">
+      <g>
+       <use xlink:href="#m470ff8da0c" x="516.924103" y="75.883388" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_90">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start" x="523.924103" y="79.682216" transform="rotate(-0 523.924103 79.682216)">0.00010</text>
+     </g>
+    </g>
+    <g id="text_91">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="576.875665" y="341.060898" transform="rotate(-90 576.875665 341.060898)">Maximum absolute logit difference</text>
+    </g>
+   </g>
+   <g id="LineCollection_1"/>
+   <g id="patch_6">
+    <path d="M 490.406352 606.238409
+L 503.665227 606.238409
+L 516.924103 606.238409
+L 516.924103 75.883388
+L 503.665227 75.883388
+L 490.406352 75.883388
+L 490.406352 606.238409
+z
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p9211e7a411">
+   <rect x="122.62524" y="39.722818" width="350.267725" height="602.676161"/>
+  </clipPath>
+ </defs>
+</svg>

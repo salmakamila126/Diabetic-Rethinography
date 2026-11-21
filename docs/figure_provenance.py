@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from xml.etree import ElementTree as ET
 
 from docs import e5_e6_publication as integrated, e7_ddr_publication as ddr, e7_publication as aptos
+from docs import pruning_pilot_publication as pruning
 
 ROOT = integrated.ROOT
 VERIFIED = "VERIFIED"
@@ -80,6 +81,10 @@ def describe(path, baseline, archive):
     p = Path(path)
     stem = p.stem
     if path.startswith("docs/figures/"):
+        if stem in pruning.STEMS:
+            return ("Five-job pruning pilot", source((pruning.FOLDER / "validation_evidence.json").as_posix(), stem),
+                    source("docs/pruning_pilot_publication.py", "plot"), "Frozen validation subset · pre-recovery",
+                    VERIFIED, "Regenerated from verified aggregate rows with original member digests")
         if stem.startswith(("aptos2019_e7_", "ddr_e7_")):
             dataset = "DDR" if stem.startswith("ddr_") else "APTOS2019"
             module = "e7_ddr_publication" if dataset == "DDR" else "e7_publication"
@@ -192,6 +197,7 @@ def verify_regeneration():
         integrated.plot_overview(runs, out)
         aptos.plot(read(f"{aptos.FOLDER.as_posix()}/validation_evidence.json"), out)
         ddr.plot(read(ddr.EVIDENCE.as_posix()), out)
+        pruning.plot(pruning.verify(read((pruning.FOLDER / "validation_evidence.json").as_posix())), out)
         generated = sorted(out.iterdir())
         published = sorted((ROOT / "docs/figures").iterdir())
         integrated.require([p.name for p in generated] == [p.name for p in published], "Publication figure inventory differs")
@@ -274,7 +280,7 @@ Run `python -m docs.figure_provenance --check --verify-generators` from the repo
 - The [CAD-ViT historical audit](FIGURE_AUDIT.md) identifies the archived plots, transcribed paper references, three-phase V2 or mixed-protocol histories and the original loss/split definitions. The audit preserves those definitions. Transfer hashes establish byte identity. They cannot establish independent model execution, recover missing image-level predictions, or authorize redistribution of APTOS images kept locally.
 - DDR preprocessing and augmentation montages, Grad-CAM and error examples are published selected panels from a real dataset. Their [transfer notes](../reproduction/report_figures/README.md) document attribution and metadata. The original server montage commands, complete input membership, checkpoint and prediction artefacts are needed to reproduce the exact figures.
 - The three E5 APTOS legacy SVGs and the APTOS balanced curve were checked numerically. The ten B0–B4 confusion PNGs match the transfer receipts. Their original Matplotlib code and formatting parameters are still missing. The archived DDR mixed-protocol PNGs preserve the original outputs within the audit limits shown above.
-- [Optimization readiness](../notebooks/optimization/README.md) documents the original/0%, 10%, 30% and 50% arms, backend parity and optional recovery. `write_report`, `write_figure` and `write_tradeoff` in the [optimization report module](../novelty_integrated/optimization/reporting.py) define future plots from external measurement JSON. No pruning, backend parity, recovery or latency figure is committed to `salma` for these campaigns. Their operational HPC status is outside the public repository audit. Existing [partner ConvNeXtV2/HF V1 notebook results](OPTIMIZATION_COMPATIBILITY.md) belong to separate archived runs and are not substituted for `salma` results.
+- The [pruning pilot](PRUNING_PILOT_RESULTS.md) publishes four reproducible PNG/SVG pairs for pre-recovery quality and backend parity on 100 frozen validation images per dataset. Complexity profiles and recovery evidence are unavailable. Latency was not measured by the untimed validation protocol. Existing [partner ConvNeXtV2/HF V1 notebook results](OPTIMIZATION_COMPATIBILITY.md) belong to separate archived runs.
 - Design diagrams in Markdown or notebook text are explanatory schematics. Original notebook media and transcribed paper figures are labeled separately from local experimental output.
 """
 

@@ -1,5 +1,6 @@
 """Generate static, no-execution result notebooks from the optimization inventory."""
 
+import json
 from pathlib import Path
 import sys
 
@@ -10,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from novelty_integrated.optimization import hpc
+from docs import pruning_pilot_publication as pilot
 
 
 EXECUTION = """\
@@ -84,8 +86,6 @@ The published validation macro-F1 is **{val['macro_f1']:.6f}**. It documents che
     else:
         partial = ROOT / "results/DDR/e7_global_local/validation_evidence.json"
         if job == "E7_DDR" and partial.is_file():
-            import json
-
             record = json.loads(partial.read_text(encoding="utf-8"))
             best = record["summary"]["best"]
             origin = ("**PARTIAL / EARLY STOPPED AT EPOCH 10.** The research evidence records ten completed epochs. "
@@ -140,8 +140,19 @@ The published validation macro-F1 is **{val['macro_f1']:.6f}**. It documents che
            "Report classifier agreement for backend changes and grade-level losses for pruning or recovery. "
            "Keep this exploratory validation comparison separate from final-test assessment."),
     ]
+    evidence = ROOT / pilot.FOLDER / "validation_evidence.json"
+    has_pilot = job in pilot.JOBS and evidence.is_file()
+    if has_pilot:
+        cells[-1] = md("## Current conclusion\n\n"
+                       "The unrecovered pruning pilot records substantial quality loss on this sample, "
+                       "despite preserved numerical parity across backends. Selecting a recovered ratio or a "
+                       "CPU latency trade-off requires matched recovery and isolated timing evidence.")
+    stem = job.lower().replace("_", "-")
     for i, cell in enumerate(cells):
-        cell.id = f"{job.lower().replace('_', '-')}-{i:02}"
+        cell.id = f"{stem}-{i:02}"
+    if has_pilot:
+        published = json.loads(evidence.read_bytes())
+        cells.insert(5, md(pilot.notebook_evidence(published, job), id=f"{stem}-pilot"))
     return nb.v4.new_notebook(cells=cells, metadata={
         "kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},
         "optimization": {"job": job, "dataset": entry.dataset, "arm": entry.arm,
