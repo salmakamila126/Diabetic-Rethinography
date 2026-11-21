@@ -253,6 +253,11 @@ def experiment(method, dataset, baseline):
         runs = [read(evidence)]
         fallback = {}
         checkpoint = runs[0]["checkpoint_sidecars"]["best.pt"]["sha256"]
+    elif method == "E7" and dataset == "APTOS2019":
+        folder = "results/APTOS2019/e7_global_local"
+        evidence = f"{folder}/validation_evidence.json"
+        runs = [read(evidence)]
+        checkpoint = runs[0]["checkpoint_sidecars"]["best.pt"]["sha256"]
     else:
         e5 = read(f"results/{dataset}/e5_integrated/validation_evidence.json")
         runs, evidence, checkpoint = [], None, None
@@ -261,7 +266,11 @@ def experiment(method, dataset, baseline):
                          "input_transport":{"num_workers":2,"persistent_workers":True,"prefetch_factor":2,"pin_memory":True},
                          "e5_checkpoint_sha256":e5["checkpoint_sidecars"]["best.pt"]["sha256"]})
 
-    top = [md(f"# {method} — {dataset}\n\n{HYPOTHESES[method]}\n\n"
+    completed_e7 = method == "E7" and bool(runs)
+    hypothesis = ("The full 384 px field and two 224 px detail views test whether retaining more local information changes grade predictions. "
+                  "The audited APTOS2019 run completed 20 epochs and selected epoch 19 by validation macro-F1."
+                  if completed_e7 else HYPOTHESES[method])
+    top = [md(f"# {method} — {dataset}\n\n{hypothesis}\n\n"
               "[Notebook index](../README.md) · [Experiment audit](../../docs/NOTEBOOK_EXPERIMENT_AUDIT.md)")]
     if baseline_method:
         interface = "[foundation adaptation](../../novelty/foundation_adaptation.py)"
@@ -292,7 +301,10 @@ def experiment(method, dataset, baseline):
         architecture += " Recorded parameter counts are " + ", ".join(f"{k}={v:,}" for k,v in counts.items()) + "."
     if method=="E7":
         architecture += (" One shared backbone serves the full 384×384 view and two 224×224 patches. A 1,537-parameter gate fuses "
-                         "the pooled global and mean local embeddings. The external checkpoint has no verified count in this checkout.")
+                         "the pooled global and mean local embeddings.")
+        architecture += (f" The reported {runs[0]['summary']['parameter_counts']['total']:,} trainable parameters agree "
+                         "with the E5 model plus the gate." if completed_e7 else
+                         " The external checkpoint has no verified count in this checkout.")
     preprocess = PROCESSOR
     if method in ("B1","B3","B4","E5","E6","E7"):
         preprocess += " " + AUGMENTATION
@@ -311,6 +323,10 @@ def experiment(method, dataset, baseline):
         setup = SETUP + f"\nMETHOD, DATASET = {method!r}, {dataset!r}\nEVIDENCE = {evidence!r}\n"
         setup += (f"blob = json.loads((ROOT / EVIDENCE).read_text(encoding='utf-8'))\nRUNS = {display_expr}\n"
                   "CONFIG = RUNS[0]['configuration'] if RUNS else {}\n")
+        if completed_e7:
+            setup += ("CONFIG = {**CONFIG, 'e5_checkpoint_sha256': CONFIG['init']['checkpoint_sha256'],\n"
+                      "          'input_transport': {key: CONFIG[key] for key in\n"
+                      "              ('workers', 'persistent_workers', 'prefetch_factor', 'pin_memory')}}\n")
     else:
         setup = SETUP + f"\nMETHOD, DATASET = {method!r}, {dataset!r}\nRUNS = []\nCONFIG = {fallback!r}\n"
     setup += f"CHECKPOINT_SHA256 = {checkpoint!r}\nprint(f'{{METHOD}} {{DATASET}}: {{len(RUNS)}} published run(s) in this notebook.')"
@@ -335,6 +351,25 @@ def experiment(method, dataset, baseline):
                     saved_figure(path),
                     md("The next output displays the original train and validation learning curves. Metric coverage follows the corresponding recorded history."),
                     saved_figure(curve)]
+        elif completed_e7:
+            from docs.e7_publication import comparison_table
+
+            cfg = record["configuration"]
+            top += [md("### Run provenance\n\n"
+                       f"Warm-started from the E5 APTOS2019 epoch-{cfg['init']['checkpoint_epoch']} checkpoint "
+                       f"(`{cfg['init']['checkpoint_sha256']}`). E7 selected raw weights without EMA. Its best and last sidecars "
+                       "matched the separately hashed HPC binaries, which are absent from the transfer. "
+                       f"[Source and checkpoint details](../../{folder}/validation_report.md#provenance-and-limitations) · "
+                       f"[Derived epoch CSV](../../{folder}/history.csv)."),
+                    md(f"### Learning curves\n\nAll epochs are shown. The vertical reference marks the checkpoint selected by macro-F1. "
+                       f"[Loss and resource panels](../../{folder}/validation_report.md#figure-index) report separately recorded quantities."),
+                    saved_figure("docs/figures/aptos2019_e7_epoch_scores.png"),
+                    md("### Confusion at epoch 19\n\nThe left panel gives counts, and the right divides each row by true-grade support. "
+                       "Grade 1 recall was 24/35 and grade 3 recall was 8/20."),
+                    saved_figure("docs/figures/aptos2019_e7_confusion.png"),
+                    md("### Selected E5, E6 and E7 validation checkpoints\n\n" + comparison_table(record) +
+                       "\nThe three checkpoints were selected on the same frozen validation split."),
+                    saved_figure("docs/figures/aptos2019_e7_e5_e6_e7_comparison.png")]
         else:
             path = f"docs/figures/{dataset.lower()}_confusion.png"
             top += [md(f"### Published comparison figures\n\n[Run report](../../{folder}/validation_report.md) · "
@@ -361,10 +396,17 @@ def experiment(method, dataset, baseline):
         top += [md("## Separate historical final test\n\nThe [locked final-test report](../../results/APTOS2019/e5_integrated/README.md) "
                    "documents its independent 366-image test split. The current epoch and best-checkpoint tables above use the "
                    "validation split only. The notebook exposes no test execution.")]
-    top += [md("## Interpretation and limits\n\n" + interpret(method, dataset, baseline, runs) + "\n\n" + (
+    interpretation = ("E7 had higher accuracy and QWK and lower grade MAE than E5, while E5 retained the highest macro-F1. "
+                      "E7 grade 1 and grade 3 recall were both lower than E5. These are single-seed, validation-selected observations. "
+                      "E7 warm-started from E5 and uses three views, so training budget and inference compute differ. "
+                      "This comparison provides no significance test or conclusion about clinical performance. "
+                      "No E7 final-test result is reported."
+                      if completed_e7 else interpret(method, dataset, baseline, runs))
+    top += [md("## Interpretation and limits\n\n" + interpretation + "\n\n" + (
         "Use the [E5–E6 comparison](../../docs/E5_E6_VALIDATION.md) for the dataset-specific trade-offs, including "
         "grade 1 false positives, grade 3 recall, and the confidence-scale audit. Validation selected the best epoch, so "
         "single-run differences are descriptive." if method in INTEGRATED else
+        f"[Full validation report and figure index](../../{folder}/validation_report.md)." if completed_e7 else
         "Do not infer a gain from geometry or multi-view fusion before validation artifacts are verified." if method=="E7" else
         "Screening comparisons share validation data and need independent confirmation. A selected checkpoint is not a final-test result. "
         "See the [baseline rationale and audit](../../docs/NOTEBOOK_EXPERIMENT_AUDIT.md#b0b4-mapping)."))]

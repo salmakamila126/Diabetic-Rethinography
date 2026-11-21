@@ -1,6 +1,6 @@
 # E7 global/local ConvNeXt pilot
 
-**Status:** source implementation and synthetic CPU checks only. Neither cache has been built on HPC; no E7 GPU smoke, benchmark, training, validation result, or final-test evaluation has been performed here. The live E6 DDR status is unknown from this Windows session. Do not call the approach clinically lesion aware based on its learned gate or patch positions.
+**Status:** APTOS2019 completed 20 training epochs on HPC. Epoch 19 was selected by validation macro-F1. The [audited validation report](../../results/APTOS2019/e7_global_local/validation_report.md) links the complete aggregate history and both checkpoint receipts. DDR completion remains unverified. No E7 final-test result or checkpoint latency benchmark is reported. The learned gate and patch positions do not establish lesion localization.
 
 ## Protocol and source audit
 

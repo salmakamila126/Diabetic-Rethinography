@@ -11,7 +11,7 @@ CLASS_ORDER = (0, 1, 2, 3, 4)
 DATASETS = ("APTOS2019", "DDR")
 INTEGRATED = {"E5": "e5_integrated", "E6": "e6_ldam_ordinal_adjacent"}
 STATUSES = frozenset(("SUPPORTED", "NEEDS_ADAPTER", "MISSING_CHECKPOINT",
-                      "MISSING_SOURCE", "PENDING_TRAINING", "NOT_APPLICABLE", "UNVERIFIED"))
+                      "MISSING_SOURCE", "PENDING_TRAINING", "NOT_APPLICABLE", "UNVERIFIED", "COMPLETED"))
 B1_SOURCE = "2b011e422c40f52a03a3d0aa89e0d18285875da1946058c265cc07747a61f300"
 
 
@@ -35,7 +35,7 @@ class Experiment:
 
     @property
     def checkpoint_sha256(self):
-        if self.arm in INTEGRATED:
+        if "checkpoint_sidecars" in self.evidence:
             return self.evidence["checkpoint_sidecars"]["best.pt"]["sha256"]
         return self.evidence["source_sha256"]["best.pt"]
 
@@ -48,6 +48,13 @@ class Experiment:
             info.update(checkpoint_availability="MISSING_CHECKPOINT",
                         checkpoint_sha256=self.checkpoint_sha256, best_epoch=self.best["epoch"],
                         manifest_sha256=self.configuration["manifest"]["manifest_sha256"])
+        if self.arm == "E7":
+            info.update(training_status="VALIDATION_COMPLETE" if self.evidence else "UNVERIFIED",
+                        source_evidence_status="VERIFIED" if self.evidence else "UNVERIFIED",
+                        checkpoint_digest_status="VERIFIED_ON_HPC" if self.evidence else "UNVERIFIED",
+                        checkpoint_availability="MISSING_CHECKPOINT" if self.evidence else "UNVERIFIED",
+                        checkpoint_load_status="NOT_RUN", original_checkpoint_export_status="NOT_RUN",
+                        benchmark_status="NOT_RUN")
         return info
 
 
@@ -80,6 +87,14 @@ def registry():
                 raise ValueError("Integrated validation evidence does not match the registry")
             entries[dataset, arm] = Experiment(dataset, arm, "hf_v1_ordinal", "SUPPORTED", path, run)
         entries[dataset, "E7"] = Experiment(dataset, "E7", "hf_v1_global_local", "PENDING_TRAINING")
+    path = "results/APTOS2019/e7_global_local/validation_evidence.json"
+    if (ROOT / path).is_file():
+        run = _read(path)
+        if (run["experiment"] != "E7_APTOS2019" or run["configuration"]["dataset"] != "APTOS2019"
+                or run["summary"]["status"] != "VALIDATION_COMPLETE" or run["summary"]["epochs_completed"] != 20
+                or run["audit"]["source_files_verified"] != 18):
+            raise ValueError("E7 validation evidence does not match the registry")
+        entries["APTOS2019", "E7"] = Experiment("APTOS2019", "E7", "hf_v1_global_local", "COMPLETED", path, run)
     entries["DDR", "B4"] = Experiment("DDR", "B4", None, "NOT_APPLICABLE")
     return entries
 

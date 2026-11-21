@@ -24,7 +24,7 @@ Gunakan notebook sesuai model, dataset, dan eksperimen. Tabel statis bersumber d
 | --- | --- | --- | --- |
 | E5 Integrated | [Notebook](novelty/E5_APTOS2019.ipynb) | [Notebook](novelty/E5_DDR.ipynb) | Dua run 20 epoch dengan validasi terverifikasi. Final test historis APTOS memiliki [laporan terpisah](../results/APTOS2019/e5_integrated/README.md). |
 | E6 Boundary-Aware | [Notebook](novelty/E6_APTOS2019.ipynb) | [Notebook](novelty/E6_DDR.ipynb) | Dua run 20 epoch dengan validasi terverifikasi. |
-| E7 Global/Local | [Notebook](novelty/E7_APTOS2019.ipynb) | [Notebook](novelty/E7_DDR.ipynb) | Protokol dan runner tersedia. Hasil dan status HPC saat ini belum terverifikasi dalam checkout ini. |
+| E7 Global/Local | [Notebook](novelty/E7_APTOS2019.ipynb) | [Notebook](novelty/E7_DDR.ipynb) | APTOS2019 selesai 20 epoch, checkpoint terpilih epoch 19. [Laporan validasi dan indeks figur](../results/APTOS2019/e7_global_local/validation_report.md). DDR menunggu bukti. |
 
 [Laporan E5–E6](../docs/E5_E6_VALIDATION.md) menyediakan 80 epoch dan indeks figur publikasi. [Inventaris eksperimen](../docs/NOTEBOOK_EXPERIMENT_AUDIT.md) menghubungkan source, checksum, bukti, dan snapshot notebook yang sudah dipensiunkan. [Audit backend dan pruning](../docs/OPTIMIZATION_COMPATIBILITY.md) membedakan catatan optimasi historis pada branch `novelty` dari rancangan evaluasi berikutnya di `salma`.
 

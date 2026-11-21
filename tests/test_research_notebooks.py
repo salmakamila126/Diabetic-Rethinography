@@ -149,7 +149,7 @@ class ResearchNotebookIntegrity(unittest.TestCase):
                 cell.id = f"{arm.lower()}-{dataset.lower()}-{i:02}"
             self.assertEqual(actual, expected, path)
             totals[arm[0]] += actual.metadata.research.epoch_records
-        self.assertEqual(totals, {"B":200,"E":80})
+        self.assertEqual(totals, {"B":200,"E":100})
 
     def test_e5_validation_and_locked_test_are_distinct(self):
         base = "results/APTOS2019/e5_integrated/"

@@ -85,10 +85,15 @@ class OptimizationTests(unittest.TestCase):
     def test_research_registry(self):
         self.assertEqual(len(self.entries), 17)
         self.assertEqual(registry.STATUSES, {"SUPPORTED", "NEEDS_ADAPTER", "MISSING_CHECKPOINT",
-                         "MISSING_SOURCE", "PENDING_TRAINING", "NOT_APPLICABLE", "UNVERIFIED"})
+                         "MISSING_SOURCE", "PENDING_TRAINING", "NOT_APPLICABLE", "UNVERIFIED", "COMPLETED"})
         self.assertEqual(self.entries["DDR", "B4"].status, "NOT_APPLICABLE")
         self.assertEqual(self.entries["DDR", "E7"].status, "PENDING_TRAINING")
-        self.assertEqual(self.entries["APTOS2019", "E7"].status, "PENDING_TRAINING")
+        e7 = self.entries["APTOS2019", "E7"]
+        self.assertEqual(e7.status, "COMPLETED")
+        self.assertEqual(e7.describe()["checkpoint_digest_status"], "VERIFIED_ON_HPC")
+        self.assertEqual(e7.describe()["checkpoint_availability"], "MISSING_CHECKPOINT")
+        self.assertEqual(e7.describe()["benchmark_status"], "NOT_RUN")
+        registry.require_sources(e7)
         for dataset in registry.DATASETS:
             expected = phase.SPECS[dataset]["manifest_sha256"]
             for arm in ("B0", "B1", "B2", "B3", "E5", "E6"):
@@ -126,6 +131,19 @@ class OptimizationTests(unittest.TestCase):
                 models.load_original(entry, Path(work) / "best.pt", work, trust_checkpoint=True)
             with self.assertRaisesRegex(ValueError, "PENDING_TRAINING"):
                 models.load_original(self.entries["DDR", "E7"], Path(work) / "best.pt", work)
+            load.assert_not_called()
+
+    def test_e7_record_requires_completed_run_lineage_and_raw_weights(self):
+        entry = self.entries["APTOS2019", "E7"]
+        state = {"record": entry.configuration, "epoch": 19, "best": entry.best, "selection_weights": "raw"}
+        models.verify_record(entry, state)
+        for changed in ({**state, "selection_weights": "ema"}, {**state, "epoch": 20},
+                        {**state, "record": {**state["record"], "geometry": {}}}):
+            with self.assertRaises(ValueError):
+                models.verify_record(entry, changed)
+        with tempfile.TemporaryDirectory() as work, patch.object(fa, "_load_checkpoint") as load:
+            with self.assertRaisesRegex(FileNotFoundError, "MISSING_CHECKPOINT"):
+                models.load_original(entry, Path(work) / "best.pt", work)
             load.assert_not_called()
 
     def test_strict_original_loader_checkpoint_identity_and_immutability(self):

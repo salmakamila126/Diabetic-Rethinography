@@ -6,7 +6,7 @@ Dokumentasi utama dipisahkan menjadi tiga studi agar metodologi dan hasil tidak 
 
 1. [Reproduksi CAD-ViT](notebooks/reproduction/CAD_ViT_Reproduction.ipynb) mencakup fidelity terhadap paper, V1, V2, dan balanced/recovery.
 2. [ConvNeXt B0–B4 per dataset](notebooks/README.md#baseline-convnext-tiny-b0b4) mencakup 10 run validasi dengan histori dan figur asli.
-3. [ConvNeXt E5–E7 per dataset](notebooks/README.md#eksperimen-e5e7) memisahkan empat run terverifikasi E5/E6 dari protokol global/local E7 yang hasilnya belum terverifikasi di Git.
+3. [ConvNeXt E5–E7 per dataset](notebooks/README.md#eksperimen-e5e7) memuat empat run E5/E6 dan validasi E7 APTOS2019 yang telah diaudit. Status DDR E7 masih menunggu bukti.
 
 Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan validasi E5–E6](docs/E5_E6_VALIDATION.md) memuat perbandingan checkpoint, kurva lengkap, matriks kebingungan, metrik per grade, dan audit provenance. [Audit eksperimen dan snapshot lama](docs/NOTEBOOK_EXPERIMENT_AUDIT.md) mencatat pemindahan notebook. [Audit optimasi](docs/OPTIMIZATION_COMPATIBILITY.md) memisahkan benchmark historis ConvNeXtV2 dari protokol usulan untuk model di `salma`.
 

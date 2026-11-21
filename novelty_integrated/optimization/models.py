@@ -78,7 +78,7 @@ def verify_receipt(entry, checkpoint):
         raise ValueError("Use the original best.pt outside the repository")
     phase._outside_repository(path)
     phase.require_hash(path, entry.checkpoint_sha256)
-    if entry.arm in INTEGRATED and path.stat().st_size != entry.evidence["checkpoint_sidecars"]["best.pt"]["bytes"]:
+    if "checkpoint_sidecars" in entry.evidence and path.stat().st_size != entry.evidence["checkpoint_sidecars"]["best.pt"]["bytes"]:
         raise ValueError("Checkpoint length differs from the published receipt")
     return path
 
@@ -89,12 +89,18 @@ def verify_record(entry, state):
     baseline_arm = "B1" if entry.arm.startswith("B4-") else entry.arm
     if (state["epoch"] != entry.best["epoch"] or state["best"]["epoch"] != state["epoch"]
             or record["dataset"] != entry.dataset or record["schema"] != cfg["schema"]
-            or record["seed"] != cfg["seed"] or record["model_kind"] != "convnext_tiny"
+            or record["seed"] != cfg["seed"] or (entry.arm != "E7" and record["model_kind"] != "convnext_tiny")
             or record["snapshot"] != cfg["snapshot"] or record.get("class_order", list(CLASS_ORDER)) != list(CLASS_ORDER)
             or any(record["manifest"][key] != cfg["manifest"][key]
                    for key in ("manifest_sha256", "counts", "grade_support", "image_order_sha256"))):
         raise ValueError("Checkpoint metadata differs from published validation evidence")
-    if entry.arm in INTEGRATED:
+    if entry.arm == "E7":
+        fields = ("source_sha256", "git_head", "class_order", "effective_processor_sha256", "train_counts",
+                  "geometry", "init", "selection_weights", "ema_decay", "val_cache_metadata_sha256")
+        if (any(record.get(key) != cfg[key] for key in fields) or state.get("best") != entry.best
+                or state.get("selection_weights") != cfg["selection_weights"]):
+            raise ValueError("E7 checkpoint selection or provenance differs")
+    elif entry.arm in INTEGRATED:
         if record.get("source_sha256") != cfg["source_sha256"] or record.get("train_counts") != cfg["train_counts"]:
             raise ValueError("Checkpoint source or training counts differ")
         if record.get("effective_processor_sha256") != cfg["effective_processor_sha256"]:
