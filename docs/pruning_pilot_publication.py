@@ -34,6 +34,7 @@ METRICS = {"accuracy": "Accuracy", "macro_f1": "Macro-F1", "weighted_f1": "Weigh
 TOLERANCES = {"atol": 1e-4, "rtol": 1e-4}
 STEMS = ("pruning_pilot_aptos2019_quality", "pruning_pilot_ddr_quality",
          "pruning_pilot_macro_f1_delta", "pruning_pilot_backend_parity")
+# Status in the original validation export. Supplementary evidence lives in separate files.
 STUDY_STATUS = {"complexity": "MISSING_PREPARED_PROFILES",
                 "post_recovery": {job: "UNVERIFIED" for job in ("E5_APTOS2019", "E7_APTOS2019")},
                 "latency": "NOT_MEASURED"}
@@ -255,7 +256,7 @@ def parity_table(bundle, jobs=JOBS):
     return markdown_table(["Job", "Backend vs eager", "PASS", "Min. argmax agreement", "Max. absolute logit difference"], values)
 
 
-def notebook_evidence(bundle, job):
+def notebook_evidence(bundle, job, *, supplement_text=None):
     """Render static Markdown from the same records as the campaign report and figures."""
     report = bundle["jobs"][job]["validation"]
     dataset = report["dataset"]
@@ -264,6 +265,9 @@ def notebook_evidence(bundle, job):
     rows = list(quality_rows(bundle, [job]))
     n_grade0 = sum(row[0] for row in report["variants"][-1]["backends"]["eager"]["quality"]["confusion_matrix"])
     worst = max(r["maximum_absolute_logit_difference"] for r in parity_rows(bundle, [job]))
+    if supplement_text is None:
+        supplement_text = ("Post-recovery evidence is `UNVERIFIED` in this export. Prepared-profile parameter counts and MACs "
+                           "are unavailable. Shared CPU validation recorded no timing, so latency is `NOT_MEASURED`.")
     return (
         "## Published structured-pruning pilot — before recovery\n\n"
         f"`pilot_100_v1` used the same ordered 100 frozen validation cases across variants, "
@@ -281,9 +285,7 @@ def notebook_evidence(bundle, job):
         f"The largest absolute logit difference was {worst:.6g} under the recorded FP32 "
         f"absolute and relative tolerances of 0.0001. Agreement checks the export against its own variant.\n\n"
         f"### Recovery, complexity and CPU timing\n\n"
-        f"Post-recovery evidence is `UNVERIFIED` in this export. Prepared-profile parameter counts and MACs "
-        f"are unavailable. Shared CPU validation recorded no timing, so latency is `NOT_MEASURED`. "
-        f"These data support a descriptive quality comparison on the pilot cases.\n\n"
+        f"{supplement_text}\n\n"
         f"[Campaign report](../../docs/PRUNING_PILOT_RESULTS.md) · "
         f"[Evidence and confusion matrices](../../{(FOLDER / 'validation_evidence.json').as_posix()}) · "
         f"[Per-variant parity CSV](../../{(FOLDER / 'numerical_parity.csv').as_posix()}) · "
@@ -291,8 +293,8 @@ def notebook_evidence(bundle, job):
     )
 
 
-def save_figure(figure, output, stem, rows):
-    data = json.dumps({"evidence": (FOLDER / "validation_evidence.json").as_posix(),
+def save_figure(figure, output, stem, rows, evidence="validation_evidence.json"):
+    data = json.dumps({"evidence": (FOLDER / evidence).as_posix(),
                        "rows": rows}, sort_keys=True, separators=(",", ":"))
     figure.savefig(output / f"{stem}.png", dpi=200, metadata={"Description": data})
     svg = StringIO()
@@ -373,6 +375,70 @@ def _plot(plt, bundle, output):
     plt.close(fig)
 
 
+COMPLEXITY_STEMS = ("pruning_pilot_parameters", "pruning_pilot_macs", "pruning_pilot_quality_complexity")
+
+
+def plot_complexity(bundle, profiles, output):
+    """Plot recorded capacity and computation with the exact matching pilot quality rows."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.ticker import ScalarFormatter
+
+    output.mkdir(parents=True, exist_ok=True)
+    fp = {(row["job"], row["target_pruning_percent"]): row["macro_f1"] for row in quality_rows(bundle)}
+    rows = [dict(row, macro_f1=fp[row["job"], row["target_pruning_percent"]]) for row in profiles]
+    colors = {"E5": "#176383", "E6": "#a44918", "E7": "#6950a1"}
+    styles = {"E5": ("-", "o", 8), "E6": ("--", "s", 4), "E7": ("-", "D", 5)}
+    chart = [("parameters", 10**6, "Parameters (millions)", "Parameter count by pruning target"),
+             ("macs_per_image", 10**9, "MACs per image (billions)", "Conv2d and Linear MACs by pruning target"),
+             ("macro_f1", 1, "Macro-F1", "Pre-recovery Macro-F1 vs recorded MACs")]
+    markers = dict(zip((0, 10, 30, 50), ("o", "s", "^", "D")))
+    with plt.rc_context(rc=matplotlib.rcParamsDefault):
+        plt.rcParams.update({"svg.hashsalt": "pilot-100-v1-profiles", "svg.fonttype": "none",
+                             "font.family": "DejaVu Sans", "axes.spines.top": False, "axes.spines.right": False})
+        for stem, (key, scale, ylabel, title) in zip(COMPLEXITY_STEMS, chart, strict=True):
+            fig, axes = plt.subplots(1, 2, figsize=(9.8, 4.4), layout="constrained", sharey=True)
+            for ax, dataset in zip(axes, DATASETS, strict=True):
+                for job in (j for j in JOBS if j.endswith(dataset)):
+                    arm = job.split("_")[0]
+                    data = [r for r in rows if r["job"] == job]
+                    targets = [r["target_pruning_percent"] for r in data]
+                    style, marker, size = styles[arm]
+                    tradeoff = key == "macro_f1"
+                    x = [r["macs_per_image"] / 10**9 for r in data] if tradeoff else targets
+                    y = [r[key] / scale for r in data]
+                    ax.plot(x, y, color=colors[arm], linestyle=style, label=arm, linewidth=1.8,
+                            marker=None if tradeoff else marker, markersize=size)
+                    if tradeoff:
+                        for x_i, y_i, target in zip(x, y, targets, strict=True):
+                            ax.plot(x_i, y_i, marker=markers[target], color=colors[arm], markersize=5)
+                ax.set_title(dataset)
+                ax.grid(axis="y", alpha=.22)
+                ax.legend(frameon=False, loc="upper right")
+                if key == "macro_f1":
+                    ax.set(xlabel="MACs per image (billions, log scale)", xscale="log",
+                           xticks=[3, 4, 10, 20], xlim=(2.05, 26), ylim=(.03, .76))
+                    ax.xaxis.set_major_formatter(ScalarFormatter())
+                else:
+                    ax.set(xlabel="Target expansion pruning (%)", xticks=[0, 10, 30, 50])
+            axes[0].set_ylabel(ylabel)
+            subtitle = ("100 frozen validation images per dataset · lines connect variants of the same checkpoint"
+                        if key == "macro_f1" else "E5 and E6 traces overlap where recorded counts match · E7 uses three views")
+            fig.suptitle(f"{title}\n{subtitle}")
+            if key == "macro_f1":
+                handles = [Line2D([], [], color="#343434", marker=m, linestyle="none", label=f"{r}%")
+                           for r, m in markers.items()]
+                axes[0].legend(handles, [h.get_label() for h in handles], loc="upper left", ncol=2,
+                               frameon=False, title="Pruning target")
+                axes[1].legend(
+                    [Line2D([], [], color=colors[a]) for a in colors], list(colors), loc="upper right",
+                    frameon=False, title="Model")
+            save_figure(fig, output, stem, rows, "complexity.csv")
+            plt.close(fig)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, help="Verify original HPC aggregate ZIP")
@@ -392,7 +458,7 @@ def main(argv=None):
             require((source / name).read_bytes().replace(b"\r\n", b"\n") == raw, f"Published table differs: {name}")
     if args.figures:
         plot(bundle, args.figures)
-    print("PASS: 5 jobs, 20 variants, 80 FP32 backend rows, 60 parity comparisons; complexity/recovery/timing unavailable.")
+    print("PASS: original ZIP evidence for 5 jobs, 20 variants, 80 FP32 backend rows and 60 parity comparisons.")
 
 
 if __name__ == "__main__":

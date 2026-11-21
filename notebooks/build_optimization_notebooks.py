@@ -1,6 +1,7 @@
 """Generate static, no-execution result notebooks from the optimization inventory."""
 
 import json
+from functools import lru_cache
 from pathlib import Path
 import sys
 
@@ -12,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from novelty_integrated.optimization import hpc
 from docs import pruning_pilot_publication as pilot
+from docs import pruning_pilot_supplement as supplement
 
 
 EXECUTION = """\
@@ -61,6 +63,17 @@ for stage in ("measurement", "post-recovery"):
         path = Path(CAMPAIGN).expanduser() / JOB / stage / figure
         display(SVG(filename=str(path)))
 """
+
+
+@lru_cache
+def published_pilot():
+    folder = ROOT / pilot.FOLDER
+    bundle = json.loads((folder / "validation_evidence.json").read_bytes())
+    if not (folder / supplement.RECOVERY_FILE).is_file():
+        return bundle, None, None
+    profiles = supplement.read_profiles(bundle, folder)
+    recovery = supplement.verify_recovery(bundle, profiles, json.loads((folder / supplement.RECOVERY_FILE).read_bytes()))
+    return bundle, profiles, recovery
 
 
 def notebook(job, entry):
@@ -151,8 +164,9 @@ The published validation macro-F1 is **{val['macro_f1']:.6f}**. It documents che
     for i, cell in enumerate(cells):
         cell.id = f"{stem}-{i:02}"
     if has_pilot:
-        published = json.loads(evidence.read_bytes())
-        cells.insert(5, md(pilot.notebook_evidence(published, job), id=f"{stem}-pilot"))
+        published, profiles, recovery = published_pilot()
+        additions = supplement.notebook_text(published, profiles, job, recovery) if profiles else None
+        cells.insert(5, md(pilot.notebook_evidence(published, job, supplement_text=additions), id=f"{stem}-pilot"))
     return nb.v4.new_notebook(cells=cells, metadata={
         "kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},
         "optimization": {"job": job, "dataset": entry.dataset, "arm": entry.arm,

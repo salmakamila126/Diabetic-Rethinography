@@ -12,7 +12,7 @@ from xml.etree import ElementTree as ET
 import nbformat
 from PIL import Image
 
-from docs import pruning_pilot_publication as pilot
+from docs import pruning_pilot_publication as pilot, pruning_pilot_supplement as supplement
 
 
 class PruningPilotPublicationTests(unittest.TestCase):
@@ -20,6 +20,9 @@ class PruningPilotPublicationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.directory = pilot.ROOT / pilot.FOLDER
         cls.evidence = pilot.verify(pilot.parse((cls.directory / "validation_evidence.json").read_bytes()))
+        cls.profiles = supplement.read_profiles(cls.evidence, cls.directory)
+        cls.recovery = supplement.verify_recovery(
+            cls.evidence, cls.profiles, pilot.parse((cls.directory / supplement.RECOVERY_FILE).read_bytes()))
 
     def test_exact_quality_and_parity_tables(self):
         for name, rows, count in (("quality.csv", pilot.quality_rows(self.evidence), 20),
@@ -67,13 +70,15 @@ class PruningPilotPublicationTests(unittest.TestCase):
         report = (pilot.ROOT / "docs/PRUNING_PILOT_RESULTS.md").read_text(encoding="utf-8")
         self.assertIn(pilot.quality_table(self.evidence), report)
         self.assertIn(pilot.parity_table(self.evidence), report)
-        self.assertIn("MISSING_PREPARED_PROFILES", report)
+        self.assertIn("20/20 prepared receipts verified", report)
+        self.assertIn(supplement.complexity_table(self.evidence, self.profiles), report)
         self.assertEqual(self.evidence["status"], pilot.STUDY_STATUS)
         for job in pilot.JOBS:
             notebook = nbformat.read(pilot.ROOT / "notebooks/optimization" / f"{job}.ipynb", as_version=4)
             nbformat.validate(notebook)
             results = [cell.source for cell in notebook.cells if cell.source.startswith("## Published structured-pruning")]
-            self.assertEqual(results, [pilot.notebook_evidence(self.evidence, job)])
+            text = supplement.notebook_text(self.evidence, self.profiles, job, self.recovery)
+            self.assertEqual(results, [pilot.notebook_evidence(self.evidence, job, supplement_text=text)])
             for cell in notebook.cells:
                 if cell.cell_type == "code":
                     self.assertEqual(cell.outputs, [])
@@ -102,6 +107,45 @@ class PruningPilotPublicationTests(unittest.TestCase):
             invalid.write_bytes(b"0" * pilot.ARCHIVE_BYTES)
             with self.assertRaisesRegex(ValueError, "Archive SHA-256 differs"):
                 pilot.load_archive(invalid)
+
+    def test_recorded_complexity_and_exact_figures(self):
+        rows = list(supplement.complexity_rows(self.evidence, self.profiles))
+        self.assertEqual(len(rows), 20)
+        self.assertEqual((self.directory / "complexity.csv").read_bytes(), pilot.csv_bytes(rows))
+        expected = {(row["job"], row["target_pruning_percent"]): row["macro_f1"]
+                    for row in pilot.quality_rows(self.evidence)}
+        joined = [dict(row, macro_f1=expected[row["job"], row["target_pruning_percent"]]) for row in rows]
+        for stem in pilot.COMPLEXITY_STEMS:
+            base = pilot.ROOT / "docs/figures" / stem
+            with Image.open(base.with_suffix(".png")) as png:
+                raster = json.loads(png.info["Description"])
+                png.verify()
+            svg = ET.parse(base.with_suffix(".svg"))
+            description = svg.find(".//{http://purl.org/dc/elements/1.1/}description")
+            self.assertEqual(json.loads(description.text), raster)
+            self.assertEqual(raster["rows"], joined)
+
+    def test_reject_changes_to_complexity_even_with_recomputed_file_sha(self):
+        profiles = copy.deepcopy(self.profiles)
+        value = profiles["E7_APTOS2019"]["pruned_30"]["record"]
+        value["profile"]["parameters"] += 1
+        profiles["E7_APTOS2019"]["pruned_30"] = supplement.member(pilot.json_bytes(value))
+        with self.assertRaisesRegex(ValueError, "prepared identity or provenance differs"):
+            supplement.validate_profiles(self.evidence, profiles)
+
+    def test_recovery_evidence_does_not_promote_missing_evaluation(self):
+        record = copy.deepcopy(self.recovery)
+        self.assertEqual(record["variant_status"], {"original": "UNVERIFIED", "pruned_10": "PARTIAL",
+                                                   "pruned_30": "UNVERIFIED", "pruned_50": "UNVERIFIED"})
+        record["validation_recovered_directory_present"] = True
+        with self.assertRaisesRegex(ValueError, "recovery snapshot or parent lineage differs"):
+            supplement.verify_recovery(self.evidence, self.profiles, record)
+        record = copy.deepcopy(self.recovery)
+        value = record["source_files"][supplement.RECOVERY_PROTOCOL]["record"]
+        value["parent_receipts_sha256"]["0.1"] = "0" * 64
+        record["source_files"][supplement.RECOVERY_PROTOCOL] = supplement.member(pilot.json_bytes(value))
+        with self.assertRaisesRegex(ValueError, "recovery snapshot or parent lineage differs"):
+            supplement.verify_recovery(self.evidence, self.profiles, record)
 
 
 if __name__ == "__main__":

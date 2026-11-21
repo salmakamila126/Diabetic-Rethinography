@@ -1,0 +1,75 @@
+{
+  "campaign": "pilot_100_v1",
+  "job": "E5_APTOS2019",
+  "listing": {
+    "recovered": [
+      "progress",
+      "recovery_protocol.json"
+    ],
+    "recovered/progress": [
+      "pruned_10"
+    ],
+    "recovered/progress/pruned_10": [
+      "epoch_01"
+    ],
+    "recovered/progress/pruned_10/epoch_01": [
+      "state.pt",
+      "state.pt.sha256.json"
+    ]
+  },
+  "observed_date": "2026-11-21",
+  "observed_via": "authenticated JupyterLab directory listing and JSON downloads",
+  "source_files": {
+    "recovered/progress/pruned_10/epoch_01/state.pt.sha256.json": {
+      "record": {
+        "bytes": 303119789,
+        "sha256": "bf7cd7bf5f726eb00a2d5ce1accc7f09e675f39163f71a4959acd3844bc7478d"
+      },
+      "source_bytes": 105,
+      "source_sha256": "5fce9d89b7010ed679299ac5ae58158a1b228a2ac937684a1890687a5b98902c"
+    },
+    "recovered/recovery_protocol.json": {
+      "record": {
+        "framework_source_sha256": {
+          "__init__.py": "5ad51d39039db35f6f0981d2af9595af1507dea15a72b0f03fb7772ab22d7e6d",
+          "__main__.py": "e22734f17a438946065776da3e8f9f7bbd2fa0888624a5e9a3f05a7efffdb04f",
+          "backends.py": "ca9c5f8f30f49be6ad965f57b6c9e0ad18ae0b6a5370345d80fe8e84795ce181",
+          "benchmark.py": "de948f26f5daadbf6490c9b3263d72ea9e003154c190b20f061f3b1db46a2ecb",
+          "hpc.py": "8240d7f520d095e5f063023063af71483ad1872fc4d48b9ba8985a3572fa30da",
+          "models.py": "23b82aa5762ae7d56cb10adfdc7332237afcbdf5b8f9bdca7a41f3d6d2c07459",
+          "notebook.py": "3d8a4921b75a09664fbf27b6869d42555ff13beb1c5203ed9108b49bfbfc11fa",
+          "pruning.py": "7459b7e27fe1117ea2506af6ca2fb1969f5d3404b44f8285c4f503ad74b0afb4",
+          "recovery.py": "9be1fb5cbd2bec97b529d5bd103f6303b3f9967dc1cd7cf5cedf65e9670fc3c2",
+          "registry.py": "4359a8c877eade253b110eb35e62d614dcf0b5f3f2013dfca816d8e36794f0e0",
+          "reporting.py": "14daa6770d5d22e8e9e2d9fe4d5ea434a799ddb1ef37fa8d6bd1cd1a2d3a3cf0",
+          "workflow.py": "563ac65787ff1254180e9f5f82c80990dbe3811a4385e1a7d3a68d2217891792"
+        },
+        "parent_receipts_sha256": {
+          "0.0": "966bb28b02a1c0830acd8b9f3c2efdeb9fd238390497261b80b2b8cf9bf4c846",
+          "0.1": "59cc8384522c2fcfb8b025e58e7b40fac78d2a53ee997e925defab681b161a5b",
+          "0.3": "dec6043375db56b4a51a08328796537f801097865abce4a8b55dbd2d4ba5e20c",
+          "0.5": "6069442e186d62d4a078fe97732443da026aa888f7d56e3903cfa08fad9f6ebc"
+        },
+        "policy": {
+          "device": "cpu",
+          "epochs": 3,
+          "gpu_uuid": null,
+          "micro_batch": 4,
+          "threads": 1
+        },
+        "protocol_sha256": "19ed6ea6fd1dafb1bc3468bc464f948e030e476457213a627217d21493470b94",
+        "schema": "convnext-optimization-recovery-v1",
+        "validation_report_sha256": "a9b96789c795faf1ee94f6d98add90b7495ef99405ce5f52986dc9270fa3a2b9"
+      },
+      "source_bytes": 1780,
+      "source_sha256": "174a737e9e35bcd0da3868d54d24173b1d4d1761c2242a1dc228b4a5b0f2396a"
+    }
+  },
+  "validation_recovered_directory_present": false,
+  "variant_status": {
+    "original": "UNVERIFIED",
+    "pruned_10": "PARTIAL",
+    "pruned_30": "UNVERIFIED",
+    "pruned_50": "UNVERIFIED"
+  }
+}

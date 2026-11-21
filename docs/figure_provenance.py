@@ -12,6 +12,7 @@ from xml.etree import ElementTree as ET
 
 from docs import e5_e6_publication as integrated, e7_ddr_publication as ddr, e7_publication as aptos
 from docs import pruning_pilot_publication as pruning
+from docs import pruning_pilot_supplement as supplement
 
 ROOT = integrated.ROOT
 VERIFIED = "VERIFIED"
@@ -81,6 +82,12 @@ def describe(path, baseline, archive):
     p = Path(path)
     stem = p.stem
     if path.startswith("docs/figures/"):
+        if stem in pruning.COMPLEXITY_STEMS:
+            profiles = source((pruning.FOLDER / "complexity.csv").as_posix(), "20 verified prepared profiles")
+            if stem.endswith("quality_complexity"):
+                profiles += " · " + source((pruning.FOLDER / "quality.csv").as_posix(), "paired eager Macro-F1")
+            return ("Five-job pruning pilot", profiles, source("docs/pruning_pilot_publication.py", "plot_complexity"),
+                    "Prepared models · pre-recovery", VERIFIED, "Receipt-bound profilers and paired frozen-subset scores")
         if stem in pruning.STEMS:
             return ("Five-job pruning pilot", source((pruning.FOLDER / "validation_evidence.json").as_posix(), stem),
                     source("docs/pruning_pilot_publication.py", "plot"), "Frozen validation subset · pre-recovery",
@@ -197,7 +204,10 @@ def verify_regeneration():
         integrated.plot_overview(runs, out)
         aptos.plot(read(f"{aptos.FOLDER.as_posix()}/validation_evidence.json"), out)
         ddr.plot(read(ddr.EVIDENCE.as_posix()), out)
-        pruning.plot(pruning.verify(read((pruning.FOLDER / "validation_evidence.json").as_posix())), out)
+        pilot = pruning.verify(read((pruning.FOLDER / "validation_evidence.json").as_posix()))
+        pruning.plot(pilot, out)
+        profiles = supplement.read_profiles(pilot, ROOT / pruning.FOLDER)
+        pruning.plot_complexity(pilot, list(supplement.complexity_rows(pilot, profiles)), out)
         generated = sorted(out.iterdir())
         published = sorted((ROOT / "docs/figures").iterdir())
         integrated.require([p.name for p in generated] == [p.name for p in published], "Publication figure inventory differs")
@@ -280,7 +290,7 @@ Run `python -m docs.figure_provenance --check --verify-generators` from the repo
 - The [CAD-ViT historical audit](FIGURE_AUDIT.md) identifies the archived plots, transcribed paper references, three-phase V2 or mixed-protocol histories and the original loss/split definitions. The audit preserves those definitions. Transfer hashes establish byte identity. They cannot establish independent model execution, recover missing image-level predictions, or authorize redistribution of APTOS images kept locally.
 - DDR preprocessing and augmentation montages, Grad-CAM and error examples are published selected panels from a real dataset. Their [transfer notes](../reproduction/report_figures/README.md) document attribution and metadata. The original server montage commands, complete input membership, checkpoint and prediction artefacts are needed to reproduce the exact figures.
 - The three E5 APTOS legacy SVGs and the APTOS balanced curve were checked numerically. The ten B0–B4 confusion PNGs match the transfer receipts. Their original Matplotlib code and formatting parameters are still missing. The archived DDR mixed-protocol PNGs preserve the original outputs within the audit limits shown above.
-- The [pruning pilot](PRUNING_PILOT_RESULTS.md) publishes four reproducible PNG/SVG pairs for pre-recovery quality and backend parity on 100 frozen validation images per dataset. Complexity profiles and recovery evidence are unavailable. Latency was not measured by the untimed validation protocol. Existing [partner ConvNeXtV2/HF V1 notebook results](OPTIMIZATION_COMPATIBILITY.md) belong to separate archived runs.
+- The [pruning pilot](PRUNING_PILOT_RESULTS.md) publishes seven reproducible PNG/SVG pairs for pre-recovery quality, backend parity, and recorded complexity. All 20 prepared profiles match published hashes. E5 APTOS2019 has a partial recovery checkpoint receipt and no aligned post-recovery validation. Latency was not measured by the untimed validation protocol. Existing [partner ConvNeXtV2/HF V1 notebook results](OPTIMIZATION_COMPATIBILITY.md) belong to separate archived runs.
 - Design diagrams in Markdown or notebook text are explanatory schematics. Original notebook media and transcribed paper figures are labeled separately from local experimental output.
 """
 

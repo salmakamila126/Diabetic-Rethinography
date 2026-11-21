@@ -1,6 +1,6 @@
 # ConvNeXt inference and pruning compatibility audit
 
-This is a static audit and proposed protocol. The [experiment inventory](NOTEBOOK_EXPERIMENT_AUDIT.md) identifies the frozen source and result lineage on `salma`. No model, dataset split, export, benchmark or pruning run was executed in this audit.
+This is a static audit and proposed protocol. The [experiment inventory](NOTEBOOK_EXPERIMENT_AUDIT.md) identifies the frozen source and result lineage on `salma`. No model, dataset split, export, benchmark or pruning run was executed in this audit. The subsequent [pruning pilot publication](PRUNING_PILOT_RESULTS.md) records what was later verified on HPC.
 
 ## What the historical optimization notebooks implement
 
@@ -39,7 +39,7 @@ For either family, L1 ranks expansion channels within a block and does not measu
 
 ## Inference backend compatibility on salma
 
-“Candidate” denotes a feasible interface subject to strict load, export, parity and timing checks. No exported artifact is verified here. B0–B4 use official HF V1 inputs and architecture, and retain their separate training protocols.
+“Candidate” denotes a feasible interface subject to strict load, export, parity and timing checks. The confirmed rows below refer to the subsequent [FP32 validation pilot](PRUNING_PILOT_RESULTS.md). Its batch-1 checks cover the fixed subset and leave latency unmeasured. B0–B4 use official HF V1 inputs and architecture and retain their separate training protocols.
 
 | Run | PyTorch eager reference | TorchScript | ONNX Runtime CPU | OpenVINO CPU |
 | --- | --- | --- | --- | --- |
@@ -48,9 +48,9 @@ For either family, L1 ranks expansion channels within a block and does not measu
 | B2 | Same classifier, B2-trained weights, no train-class weights applied to inference | Candidate | Candidate | Candidate after ONNX parity |
 | B3 | Same architecture conditional on strict load and external runner metadata | Candidate after checkpoint attestation | Candidate after checkpoint attestation | Candidate after ONNX parity |
 | B4 | APTOS Q/R only. Check the two distinct receipts, preserved validation split and preprocessing metadata | Candidate per checkpoint | Candidate per checkpoint | Candidate per checkpoint after ONNX parity |
-| E5 | Backbone + categorical slice of E5 heads, auxiliary outputs only if defined in the contract | Tensor wrapper, trace and check both target batch sizes | Candidate with aligned raw logits | Candidate from validated ONNX |
-| E6 | Same inference topology, confirm raw categorical head outputs. LDAM is training-only and adds no inference correction | Same candidate contract as E5 after attestation | Candidate | Candidate from validated ONNX |
-| E7 | [APTOS2019 completed](../results/APTOS2019/e7_global_local/validation_report.md); raw-state receipt matches HPC digests. Local binary loading and timing remain untested. DDR awaits a receipt. | Two-input wrapper and fixed-shape parity. Inspect trace specialization around shape checks | Candidate after verifying both input names, rank/axes and fusion graph | Candidate after two-input ONNX and compiled parity |
+| E5 | Backbone + categorical slice of E5 heads | Fixed-shape parity verified for APTOS2019 and DDR pilot | Fixed-shape parity verified for both pilot datasets | Fixed-shape parity verified for both pilot datasets |
+| E6 | Same inference topology as E5. LDAM is training-only. | Fixed-shape parity verified for APTOS2019 and DDR pilot | Fixed-shape parity verified for both pilot datasets | Fixed-shape parity verified for both pilot datasets |
+| E7 | [APTOS2019 completed](../results/APTOS2019/e7_global_local/validation_report.md) and included in the pilot. [DDR has partial training evidence](../results/DDR/e7_global_local/validation_report.md) and remains outside the pilot. | Two-input wrapper and fixed-shape parity verified on APTOS2019 pilot | Fixed-shape parity verified on APTOS2019 pilot | Fixed-shape parity verified on APTOS2019 pilot |
 
 Use TorchScript as a historical comparison when the pinned environment supports it. Pin ORT graph optimization, intra/inter-op threads and provider. Pin OpenVINO precision, infer streams and latency/throughput hints. CPU thread budgets and request modes should be recorded for all backends. The V2 GRN graph cannot be substituted for HF V1 because a filename or output width matches. [PyTorch TorchScript documentation](https://docs.pytorch.org/docs/stable/jit.html) · [ONNX Runtime thread management](https://onnxruntime.ai/docs/performance/tune-performance/threading.html) · [OpenVINO performance hints](https://docs.openvino.ai/2025/openvino-workflow/running-inference/optimize-inference/high-level-performance-hints.html)
 

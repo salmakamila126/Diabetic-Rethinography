@@ -12,7 +12,7 @@ Empat run E5–E6 pada APTOS2019 dan DDR telah menyelesaikan 20 epoch. [Laporan 
 
 [Audit provenance visualisasi](docs/FIGURE_PROVENANCE_AUDIT.md) menghubungkan setiap figur yang dipublikasikan dan output gambar notebook ke data, generator, serta batas verifikasinya.
 
-[Pilot structured pruning sebelum recovery](docs/PRUNING_PILOT_RESULTS.md) mencakup lima job E5–E7 dengan 100 gambar validasi beku per dataset. Laporan menyajikan perubahan kualitas dan numerical parity, beserta [notebook optimasi](notebooks/optimization/README.md), data agregat, dan generator figur. Profil parameter dan MACs belum tersedia, recovery belum terverifikasi, dan latency belum diukur.
+[Inventaris evidence akhir](docs/FINAL_RESEARCH_EVIDENCE_INVENTORY.md) memetakan ketiga studi ke sumber dan bagian laporan magang. [Inventaris figur/tabel](docs/FINAL_RESEARCH_FIGURE_INVENTORY.md) menjelaskan klaim yang didukung masing-masing visual. [Pilot structured pruning](docs/PRUNING_PILOT_RESULTS.md) mencakup lima job, 20 profil parameter dan MACs yang cocok dengan receipt, kualitas serta numerical parity pada 100 gambar validasi beku per dataset. Recovery E5 APTOS2019 masih parsial dan latency belum diukur.
 
 Notebook menggabungkan narasi ilmiah, pemeriksaan provenance dan tabel dari artefak terkomit. Semua aksi opsional dimatikan saat dibuka. Jika source eksekusi historis tersedia, notebook memanggil modul asli dengan sakelar eksplisit. Bukti reproduksi asli dan keterbatasannya tersedia dalam [audit konsolidasi historis](docs/RESEARCH_CONSOLIDATION_AUDIT.md).
 

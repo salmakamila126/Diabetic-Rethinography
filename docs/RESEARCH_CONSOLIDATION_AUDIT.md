@@ -1,5 +1,7 @@
 # Audit konsolidasi tiga studi (20 November 2026)
 
+**Snapshot historis.** Status DDR E5 yang masih berjalan merujuk waktu audit ini. [Inventaris evidence akhir](FINAL_RESEARCH_EVIDENCE_INVENTORY.md) memuat status dan publikasi yang terverifikasi setelah snapshot.
+
 Audit ini dibuat dari `origin/salma` commit `53007608e06601b1208e38229114fa581c32e78c`, pada worktree terpisah. Checkout `salma` Windows yang memiliki perubahan lokal tidak diubah. Ini adalah inventaris **bukti yang tersedia dalam Git**, bukan klaim bahwa data, checkpoint, atau run HPC telah diaudit ulang.
 
 ## Peta studi dan sumber otoritatif
