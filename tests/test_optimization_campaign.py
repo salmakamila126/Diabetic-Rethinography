@@ -3,6 +3,7 @@
 import ast
 import contextlib
 import copy
+import csv
 import io
 import json
 import os
@@ -24,7 +25,7 @@ from novelty import foundation_adaptation as fa
 from novelty import preof_phase1 as phase
 from novelty_integrated.e5.model import E5Heads
 from novelty_integrated.optimization import __main__ as cli
-from novelty_integrated.optimization import backends, hpc, models, notebook, recovery, registry, workflow
+from novelty_integrated.optimization import backends, benchmark, hpc, models, notebook, recovery, registry, workflow
 from tests.test_convnext_optimization import Backbone, FakeProcessor, val_rows
 
 
@@ -70,6 +71,32 @@ class CampaignTests(unittest.TestCase):
                 set_affinity.assert_not_called()
         self.assertEqual(hpc._parse_cpus("2-4,6,8-9"), [2, 3, 4, 6, 8, 9])
 
+    def test_shared_validation_requires_single_cpu_affinity_and_no_isolation_claim(self):
+        options = ["--job", "E5_APTOS2019", "--allocation-id", "synthetic", "--cpus", "2", "--threads", "1"]
+        parser = hpc._parser()
+        directory = Path("synthetic")
+        with patch.object(hpc.os, "sched_setaffinity", create=True) as pin, patch.object(
+                hpc, "_cpu_quota", return_value=1), patch.object(hpc, "_affinity", return_value=[2]) as affinity, patch.object(
+                hpc, "_available_ram", return_value=6 * hpc.GIB), patch.object(hpc, "_disk", return_value=6 * hpc.GIB):
+            with self.assertRaisesRegex(ValueError, "Use --shared-cpu"):
+                hpc._resource_guard(parser.parse_args(["validate", *options]), directory)
+            with self.assertRaisesRegex(ValueError, "without --confirm-isolated-cpu"):
+                hpc._resource_guard(parser.parse_args(["validate", *options, "--shared-cpu", "--confirm-isolated-cpu"]), directory)
+            args = parser.parse_args(["validate", *options, "--shared-cpu"])
+            affinity.return_value = [2, 3]
+            with self.assertRaisesRegex(ValueError, "taskset"):
+                hpc._resource_guard(args, directory)
+            affinity.return_value = [2]
+            with self.assertRaisesRegex(ValueError, "--threads 1"):
+                hpc._resource_guard(parser.parse_args(["validate", *options, "--shared-cpu", "--threads", "2"]), directory)
+            self.assertEqual(hpc._resource_guard(args, directory), [2])
+            for stage in ("measure", "measure-recovered"):
+                with self.assertRaisesRegex(ValueError, "exclusive CPU allocation"):
+                    hpc._resource_guard(parser.parse_args([stage, *options, "--shared-cpu"]), directory)
+                with self.assertRaisesRegex(ValueError, "applies only to untimed validation"):
+                    hpc._resource_guard(parser.parse_args([stage, *options, "--shared-cpu", "--confirm-isolated-cpu"]), directory)
+            pin.assert_called_once_with(0, [2])
+
     def test_notebook_default_dispatches_no_process(self):
         from IPython import display
 
@@ -109,7 +136,8 @@ class CampaignTests(unittest.TestCase):
                 workflow._publish(target, lambda scratch: (scratch / "discard").touch())
             self.assertFalse((target / "discard").exists())
 
-    def test_stage_reuses_artifacts_and_reports_paired_recovery(self):
+    @contextlib.contextmanager
+    def _fixture(self, backend_names=("eager", "torchscript"), extra_rows=0):
         entry = hpc.inventory()["E5_APTOS2019"]
         processor = FakeProcessor()
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,6 +153,7 @@ class CampaignTests(unittest.TestCase):
                 image = root / f"{row['label']}.png"
                 Image.new("RGB", (21, 23), (40 * row["label"], 20, 60)).save(image)
                 row.update(path=str(image), sha256=phase.sha256(image))
+            rows += [{**rows[i % 5], "image_id": f"fixture-{i}"} for i in range(extra_rows)]
             cfg = copy.deepcopy(entry.configuration)
             cfg["manifest"]["manifest_sha256"] = phase.sha256(manifest)
             cfg["effective_processor_sha256"] = fa._digest_json(processor.to_dict())
@@ -138,26 +167,36 @@ class CampaignTests(unittest.TestCase):
             output = root / "campaign"
             arguments = ["run", "--dataset", "APTOS2019", "--arm", "E5", "--artifact-root", str(artifact),
                 "--model-dir", str(root / "snapshot"), "--checkpoint", str(checkpoint), "--output", str(output),
-                "--trust-checkpoint", "--trust-legacy-snapshot", "--backend", "eager", "torchscript",
+                "--trust-checkpoint", "--trust-legacy-snapshot", "--backend", *backend_names,
                 "--warmup", "1", "--repeats", "2"]
-            base = cli._parser().parse_args(arguments)
-            recovered = cli._parser().parse_args(arguments + ["--authorize-recovery", "--recovery-epochs", "1", "--prune", "0.3"])
-            allocation = {"id": "synthetic", "cpus": [0], "threads": 1, "exclusive_cpu_confirmed": True}
             with patch.object(models, "load_rows", return_value={"val": rows, "train": []}), patch.object(
                     fa, "audit_snapshot", return_value=cfg["snapshot"]), patch.object(
                     fa, "load_local_backbone", side_effect=lambda *a, **k: (Backbone(), processor)), patch.object(
                     torch, "set_num_interop_threads"), contextlib.redirect_stdout(io.StringIO()):
+                yield synthetic, arguments, output, checkpoint
+
+    def test_stage_reuses_artifacts_and_reports_paired_recovery(self):
+        with self._fixture() as (synthetic, arguments, output, checkpoint):
+            base = cli._parser().parse_args(arguments)
+            recovered = cli._parser().parse_args(arguments + ["--authorize-recovery", "--recovery-epochs", "1", "--prune", "0.3"])
+            allocation = {"id": "synthetic", "cpus": [0], "threads": 1, "exclusive_cpu_confirmed": True}
+            workflow.execute("prepare", base, synthetic, cli._plan(base, synthetic), allocation)
+            shared = {**allocation, "exclusive_cpu_confirmed": False, "cpu_mode": "shared"}
+            with patch.object(benchmark, "time_backend") as timer:
+                self.assertEqual(workflow.execute("validate", base, synthetic, cli._plan(base, synthetic), shared), 0)
+                timer.assert_not_called()
+            self.assertEqual(workflow.read(output / "validation/report.json")["outcome"], "PASS")
+            self.assertFalse((output / "measurement").exists())
+            with self.assertRaisesRegex(ValueError, "unrecovered measurement"):
+                workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
+            with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
                 workflow.execute("prepare", base, synthetic, cli._plan(base, synthetic), allocation)
-                with self.assertRaisesRegex(ValueError, "unrecovered measurement"):
-                    workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
-                with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
-                    workflow.execute("prepare", base, synthetic, cli._plan(base, synthetic), allocation)
-                    workflow.execute("measure", base, synthetic, cli._plan(base, synthetic), allocation)
-                with patch.object(recovery, "recover", return_value={"objective": "synthetic"}) as trainer:
-                    workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
-                    self.assertEqual(trainer.call_count, 4)
-                with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
-                    workflow.execute("measure-recovered", base, synthetic, cli._plan(base, synthetic), allocation)
+                workflow.execute("measure", base, synthetic, cli._plan(base, synthetic), allocation)
+            with patch.object(recovery, "recover", return_value={"objective": "synthetic"}) as trainer:
+                workflow.execute("recover", recovered, synthetic, cli._plan(recovered, synthetic), allocation)
+                self.assertEqual(trainer.call_count, 4)
+            with patch.object(backends, "build", side_effect=AssertionError("unexpected export")):
+                workflow.execute("measure-recovered", base, synthetic, cli._plan(base, synthetic), allocation)
             raw = workflow.read(output / "measurement/report.json")
             post = workflow.read(output / "post-recovery/report.json")
             self.assertEqual(raw["allocation"], allocation)
@@ -177,6 +216,95 @@ class CampaignTests(unittest.TestCase):
             (path / "inference_state_dict.pt").write_bytes(b"tampered")
             with self.assertRaisesRegex(ValueError, "Invalid prepared artifact"):
                 workflow._prepared(path, raw["protocol_sha256"], .3)
+
+    def test_validation_of_predecessor_preserves_artifacts_and_reports_all_backends(self):
+        # Eager and TorchScript really execute. The two optional runtimes use fixtures here.
+        build, load = backends.build, backends.load
+
+        def export_fixture(name, model, inputs, output, **opts):
+            if name in ("eager", "torchscript"):
+                return build(name, model, inputs, output, **opts)
+            path = output / ("model.onnx" if name == "onnxruntime" else "model.xml")
+            path.write_text(name, encoding="utf-8")
+            if name == "openvino":
+                path.with_suffix(".bin").write_bytes(b"fixture")
+            return backends.Backend(model, path, {})
+
+        def load_fixture(name, model, path, names, **opts):
+            if name in ("eager", "torchscript"):
+                return load(name, model, path, names, **opts)
+            self.assertEqual(names, ["pixels"])
+            variant = path.parent.name
+            if variant == "pruned_50" and name == "openvino":
+                raise RuntimeError("synthetic load failure")
+
+            def infer(*inputs):
+                logits = model(*inputs)
+                if variant == "pruned_30" and name == "onnxruntime":
+                    return torch.nn.functional.one_hot((logits.argmax(dim=1) + 1) % 5, 5).float()
+                return logits
+
+            return backends.Backend(infer, path, {})
+
+        with self._fixture(backends.BACKENDS, extra_rows=100) as (entry, argv, output, checkpoint):
+            args = cli._parser().parse_args(argv + ["--sample-count", "100"])
+            capabilities = {name: {"status": "CANDIDATE", "missing_packages": []} for name in backends.BACKENDS}
+            with patch.object(backends, "capabilities", return_value=capabilities):
+                plan = cli._plan(args, entry)
+            allocation = {"cpu_mode": "shared", "exclusive_cpu_confirmed": False, "threads": 1, "cpus": [0]}
+            predecessor = {**workflow._source(), **workflow._PRE_VALIDATION_SOURCE}
+            with patch.object(workflow, "_source", return_value=predecessor), patch.object(
+                    backends, "build", side_effect=export_fixture):
+                workflow.execute("prepare", args, entry, plan, allocation)
+            protocol = output / "protocol.json"
+            inventory = {path: phase.sha256(path) for path in [checkpoint, protocol, *(output / "prepared").glob("*/*")]}
+            with self.assertRaisesRegex(ValueError, "Run protocol differs"):
+                workflow.execute("validate", args, entry, {**plan, "sample_count": 99}, allocation)
+            with patch.object(workflow, "_source", return_value={**workflow._source(), "models.py": "unreviewed"}):
+                with self.assertRaisesRegex(ValueError, "Run protocol differs"):
+                    workflow.execute("validate", args, entry, plan, allocation)
+            with patch.object(backends, "load", side_effect=load_fixture) as loader, patch.object(
+                    backends, "build") as exporter, patch.object(benchmark, "time_backend") as timer, patch.object(
+                    workflow.pruning, "profile") as profiler, patch.object(recovery, "recover") as trainer:
+                self.assertEqual(workflow.execute("validate", args, entry, plan, allocation), 2)
+                self.assertEqual(loader.call_count, 16)
+                self.assertEqual(workflow.execute("validate", args, entry, plan, allocation), 2)
+                self.assertEqual(loader.call_count, 16, "completed validation was rerun")
+                for forbidden in (exporter, timer, profiler, trainer):
+                    forbidden.assert_not_called()
+            report = workflow.read(output / "validation/report.json")
+            self.assertEqual(report["outcome"], "BACKEND_FAILURES")
+            self.assertEqual(report["backend_rows"], 16)
+            self.assertEqual(report["failures"], 2)
+            self.assertEqual(report["sample"], workflow.read(protocol)["sample"])
+            self.assertEqual(report["sample"]["count"], 100)
+            self.assertEqual(report["sample"]["split"], "val")
+            self.assertEqual(report["prepared_framework_source_sha256"], predecessor)
+            self.assertEqual(report["framework_source_sha256"], workflow._source())
+            self.assertEqual(report["allocation"], allocation)
+            self.assertFalse(report["timing_performed"])
+            self.assertRegex(report["ordered_preprocessed_tensor_sha256"], r"^[0-9a-f]{64}$")
+            for variant in report["variants"]:
+                eager = variant["backends"]["eager"]
+                self.assertEqual(variant["backends"]["torchscript"]["quality"], eager["quality"])
+                self.assertEqual(eager["parity"]["prediction_agreement"], 1.0)
+                self.assertTrue(all("timing" not in row for row in variant["backends"].values()))
+            self.assertEqual(report["variants"][2]["backends"]["onnxruntime"]["status"], "PARITY_FAILED")
+            self.assertEqual(report["variants"][2]["backends"]["onnxruntime"]["parity"]["prediction_agreement"], 0)
+            self.assertEqual(report["variants"][3]["backends"]["openvino"]["status"], "BACKEND_FAILED")
+            summary = output / "validation/summary.csv"
+            with summary.open(newline="", encoding="utf-8") as stream:
+                table = list(csv.DictReader(stream))
+            self.assertEqual(len(table), 16)
+            self.assertTrue(all(table[0][metric] for metric in ("macro_f1", "accuracy", "qwk", "grade_mae")))
+            self.assertListEqual(sorted(path.name for path in output.iterdir()), ["prepared", "protocol.json", "validation"])
+            self.assertTrue(all(phase.sha256(path) == digest for path, digest in inventory.items()))
+            summary.write_bytes(b"modified")
+            with self.assertRaisesRegex(ValueError, "Existing validation report differs"):
+                workflow.execute("validate", args, entry, plan, allocation)
+            (output / "prepared/pruned_50/model.bin").write_bytes(b"damaged")
+            with self.assertRaisesRegex(ValueError, "Invalid prepared artifact"):
+                workflow.execute("validate", args, entry, plan, allocation)
 
 
 if __name__ == "__main__":

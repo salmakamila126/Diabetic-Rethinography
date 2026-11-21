@@ -90,14 +90,13 @@ def _plan(args, entry):
             "parity_tolerances": {"atol": args.atol, "rtol": args.rtol}}
 
 
-def _measure_variant(name, model, batches, prepare, plan, output, tensor_digest, *, reference=None,
-                     checked_logits=None, prepared=None):
-    if prepared is None:
-        output.mkdir()
-    example = prepare(batches[0])
-    profile = pruning.profile(model, example)
+def _evaluate_backends(name, model, batches, prepare, plan, output, tensor_digest, *, input_names,
+                       example=None, checked_logits=None, prepared=None, timed):
+    if not timed and prepared is None:
+        raise ValueError("Untimed validation requires prepared artifacts")
     results = {}
     onnx = None
+    eager_logits = None
     for backend in plan["backends"]:
         info = plan["backend_candidates"][backend] if prepared is None else prepared[backend]
         if (info["missing_packages"] if prepared is None else info["status"] != "PREPARED"):
@@ -105,46 +104,65 @@ def _measure_variant(name, model, batches, prepare, plan, output, tensor_digest,
             continue
         if prepared is not None:
             print(f"{name}/{backend}: verifying ordered validation inputs", flush=True)
-        initial_memory = benchmark.memory()
+        initial_memory = benchmark.memory() if timed else None
         try:
             if prepared is None:
                 candidate = backends.build(backend, model, example, output, threads=plan["threads"], shared_onnx=onnx)
             else:
-                names = ["pixels"] if len(example) == 1 else ["global_pixels", "patch_pixels"]
                 path = output / info["file"]
                 if benchmark.artifact_receipt(path) != info["artifact"]:
                     raise ValueError("Prepared backend artifact differs")
-                candidate = backends.load(backend, model, path, names, threads=plan["threads"])
+                candidate = backends.load(backend, model, path, input_names, threads=plan["threads"])
             if prepared is None and backend == "onnxruntime":
-                names = ["pixels"] if len(example) == 1 else ["global_pixels", "patch_pixels"]
-                onnx = (candidate.artifact, names)
+                onnx = (candidate.artifact, input_names)
             if backend == "eager" and checked_logits is not None:
                 logits, digest = checked_logits, tensor_digest
             else:
                 logits, digest = benchmark.collect_logits(candidate.infer, batches, prepare)
+            if tensor_digest is None:
+                tensor_digest = digest
             if digest != tensor_digest:
                 raise ValueError("Backend input digest differs from the fixed validation tensors")
-            if backend == "eager":
-                eager_logits = logits
-            parity = benchmark.parity(eager_logits, logits, **plan["parity_tolerances"])
-            result = {"status": "PARITY_FAILED", "parity": parity, "settings": candidate.settings,
-                      "quality": benchmark.quality(logits, batches),
-                      "artifact": benchmark.artifact_receipt(candidate.artifact)}
-            if parity["passed"]:
+            reference = logits if backend == "eager" else eager_logits
+            parity = benchmark.parity(reference, logits, **plan["parity_tolerances"]) if reference is not None else None
+            status = "REFERENCE_UNAVAILABLE"
+            if parity is not None:
+                status = "VALIDATED" if parity["passed"] else "PARITY_FAILED"
+            artifact = benchmark.artifact_receipt(candidate.artifact)
+            if not timed and artifact != info["artifact"]:
+                raise ValueError("Prepared backend artifact changed during validation")
+            result = {"status": status, "parity": parity, "settings": candidate.settings,
+                      "quality": benchmark.quality(logits, batches), "artifact": artifact}
+            if timed and status == "VALIDATED":
                 if prepared is not None:
                     print(f"{name}/{backend}: measuring model-only and end-to-end passes", flush=True)
                 timing = {scope: benchmark.time_backend(candidate.infer, batches, prepare,
                            warmup=plan["warmup"], repeats=plan["repeats"], scope=scope)
                           for scope in ("model_only", "end_to_end")}
-                result.update(status="VALIDATED", timing=timing, memory_before=initial_memory,
+                result.update(timing=timing, memory_before=initial_memory,
                               memory_after=benchmark.memory())
             results[backend] = result
+            if backend == "eager":
+                eager_logits = logits
             del candidate
         except Exception as exc:
-            if backend == "eager":
+            if timed and backend == "eager":
                 raise
-            print(f"{backend}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            print(f"{name}/{backend}: {type(exc).__name__}: {exc}", file=sys.stderr)
             results[backend] = {"status": "BACKEND_FAILED", "error_type": type(exc).__name__}
+    return results, tensor_digest
+
+
+def _measure_variant(name, model, batches, prepare, plan, output, tensor_digest, *, reference=None,
+                     checked_logits=None, prepared=None):
+    if prepared is None:
+        output.mkdir()
+    example = prepare(batches[0])
+    profile = pruning.profile(model, example)
+    input_names = ["pixels"] if len(example) == 1 else ["global_pixels", "patch_pixels"]
+    results, _ = _evaluate_backends(name, model, batches, prepare, plan, output, tensor_digest,
+                                    input_names=input_names, example=example, checked_logits=checked_logits,
+                                    prepared=prepared, timed=True)
     variant = {"name": name, "profile": profile, "backends": results}
     if reference:
         parent = reference["profile"]

@@ -2,6 +2,7 @@
 
 import csv
 from html import escape
+from io import StringIO
 
 from novelty import foundation_adaptation as fa
 
@@ -41,6 +42,28 @@ def write_report(output, report):
         writer.writerows(rows)
     write_figure(output / "comparison.svg", report, rows)
     write_tradeoff(output / "tradeoff.svg", rows)
+    fa._atomic_json(output / "report.json", report)
+
+
+def validation_summary(report):
+    stream = StringIO(newline="")
+    writer = csv.writer(stream, lineterminator="\n")
+    writer.writerow(("variant", "backend", "status", "argmax_agreement", "maximum_absolute_logit_error",
+                     "macro_f1", "accuracy", "qwk", "grade_mae", "error_type"))
+    for variant in report["variants"]:
+        for name in report["backends"]:
+            backend = variant["backends"][name]
+            parity = backend.get("parity") or {}
+            quality = backend.get("quality") or {}
+            writer.writerow((variant["name"], name, backend["status"], parity.get("prediction_agreement"),
+                             parity.get("maximum_absolute"), quality.get("macro_f1"), quality.get("accuracy"),
+                             quality.get("quadratic_weighted_kappa"), quality.get("grade_mae"),
+                             backend.get("error_type")))
+    return stream.getvalue()
+
+
+def write_validation_report(output, report):
+    (output / "summary.csv").write_bytes(validation_summary(report).encode("utf-8"))
     fa._atomic_json(output / "report.json", report)
 
 

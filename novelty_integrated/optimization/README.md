@@ -91,7 +91,7 @@ For B3, pass `--external-source-dir` for the copied `foundation_b3_parallel_runn
 ## CPU checks
 
 ```bash
-python -m unittest tests.test_convnext_optimization -v
+python -m unittest tests.test_convnext_optimization tests.test_optimization_campaign -v
 ```
 
 Tests use synthetic tensors, temporary generated images and checkpoint fixtures. Optional backend and library-specific tests are skipped when their package is missing. A synthetic pass does not establish real-checkpoint numerical equivalence, latency or classification quality.
@@ -134,6 +134,45 @@ Request approved resources before launch. Set the shell variables below to the s
 Timing counts assume four backends pass compatibility and parity, batch 1, four variants, two scopes and three repetitions. They exclude warm-up, quality checks, preprocessing verification and export. The five priority pairs total **345,792 timed calls**. Available host resources, wall-clock duration and output sizes on HPC are unmeasured. The resource floors are allocation policy, not measured memory demand. Apply explicit lab quota limits in addition to the filesystem free-space guard. Budget about 15 GiB for prepared outputs. Start with 23 GiB free so the last job can still meet the 11 GiB combined launch guard if four preceding pairs each consume 3 GiB. Budget recovery storage separately.
 
 A separate fixed, grade-complete pilot can be run with `--sample-count 100` at a different campaign root. It fails before export if the chosen subset omits a grade. Use the pilot’s raw per-pass latencies to estimate full duration. Multiply each scope and variant’s measured mean call time by the full sample count and repeats, sum across scopes and backends, then add observed per-stage overhead separately. Do not substitute training throughput or historical timings from a different host.
+
+### Untimed validation on shared CPU
+
+With the already prepared `pilot_100_v1` campaign, use `validate` for parity and classification quality. It restores each prepared eager state, verifies the recorded artifact hashes and runs each backend on the same 100 frozen validation rows in manifest order. It uses the same preprocessing, FP32 logits, tolerances and argmax gate as measurement. E7 still receives the global image and both local views. There are no warm-up passes, latency or throughput estimates, exports or recovery. The execution environment and sample arguments must match preparation. Existing manifests from `c101b1a` are accepted only if their source map and all other protocol fields match that exact preparation format. Their original digests remain in use. To finish an incomplete preparation or create recovery artifacts for an existing campaign at that revision, use its preparation revision or a new campaign root.
+
+Use the reviewed checkout in an approved shared HPC session. Select one logical CPU permitted by the session and avoid the CPU and storage resources assigned to other lab jobs. The command below takes the first allowed CPU by default. Set `VALIDATION_CPU` beforehand if the lab has assigned another. It pins the process before Python starts, lowers priority and limits the runtime thread pools. The allocation ID is a report label for shared CPU, and the report records `cpu_mode: shared` and `exclusive_cpu_confirmed: false`.
+
+```bash
+conda activate convnext-research
+cd "$REVIEW_CHECKOUT"
+export CADVIT_ARTIFACT_ROOT="$HOME/CAD-ViT-Research/Kel_13"
+export CADVIT_OPT_CAMPAIGN="$CADVIT_ARTIFACT_ROOT/optimization_runs/pilot_100_v1"
+PYTHON="$(command -v python)"
+VALIDATION_CPU="${VALIDATION_CPU:-$("$PYTHON" -c 'import os; print(min(os.sched_getaffinity(0)))')}"
+
+validate_pilot_job() {
+  taskset -c "$VALIDATION_CPU" nice -n 10 env \
+    CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    "$PYTHON" -m novelty_integrated.optimization.hpc validate --job "$1" \
+    --sample-count 100 --shared-cpu --threads 1 --cpus "$VALIDATION_CPU" \
+    --allocation-id shared-cpu-pilot100-validation
+}
+
+# One job first. Review its report before starting the remaining jobs.
+validate_pilot_job E5_APTOS2019
+```
+
+```bash
+# All five sequentially. The first job reuses its completed report.
+failed_jobs=()
+for job in E5_APTOS2019 E6_APTOS2019 E7_APTOS2019 E5_DDR E6_DDR; do
+  validate_pilot_job "$job" || failed_jobs+=("$job")
+done
+if ((${#failed_jobs[@]})); then
+  printf 'Review failed or blocked job: %s\n' "${failed_jobs[@]}" >&2
+fi
+```
+
+Per job, open `<campaign>/<job>/validation/report.json` and `summary.csv`. Each table has one row per variant and backend, with argmax agreement, maximum absolute logit error, macro-F1, accuracy, QWK, and grade MAE. Inspect the JSON for the remaining parity diagnostics, frozen validation positions, input digest and both preparation and execution source hashes. Each variant has its own eager reference. Metrics on 100 validation images describe that subset. `PARITY_FAILED` still reports independently computed quality. A backend that cannot load or infer has no quality numbers. A nonzero exit marks a failed or blocked job. Audit and integrity errors block publication and are printed to the terminal. Completed reports are immutable, including those with explicit backend failures. An interrupted job can be run again with the same arguments. Validation uses the existing coordinator and per-job locks. Both timing stages still require their exclusive CPU confirmation.
 
 ### tmux launch and continuation
 
@@ -184,6 +223,6 @@ launch_opt opt-post-e5a measure-recovered --job E5_APTOS2019 --allocation-id "$M
   --cpus "$MEASURE_CPUS" --threads 4 --confirm-isolated-cpu
 ```
 
-Each pair has a `protocol.json` and independent `prepared/`, `measurement/`, `recovered/` and `post-recovery/` outputs. Repeat the same stage and arguments to continue after interruption. Preparation and recovery reuse completed arms after checking their artifact hashes and protocol. An incomplete arm restarts from its parent. Completed timing directories are write-once. An interrupted timing job measures the pair again to keep comparisons within one allocation. Recovery timing remeasures original, unrecovered and recovered arms together. Backend failures and missing reports remain explicit in JSON. Any changed source, dependency, selection or checkpoint requires a new campaign root. Original checkpoints stay read-only. Temporary or derived weights and logs remain external.
+Each pair has a `protocol.json` and independent `prepared/`, `validation/`, `measurement/`, `recovered/` and `post-recovery/` outputs. Repeat the same stage and arguments to continue after interruption. Preparation and recovery reuse completed arms after checking their artifact hashes and protocol. An incomplete arm restarts from its parent. Completed timing directories are write-once. An interrupted timing job measures the pair again to keep comparisons within one allocation. Recovery timing remeasures original, unrecovered and recovered arms together. Backend failures and missing reports remain explicit in JSON. Protocol changes outside the documented compatibility case require a new campaign root. Original checkpoints stay read-only. Temporary or derived weights and logs remain external.
 
 Set `CADVIT_OPT_CAMPAIGN` in JupyterLab to display reviewed reports through the [optimization notebook index](../../notebooks/optimization/README.md). The stage writes `report.json`, `summary.csv`, `comparison.svg`, and `tradeoff.svg` only after a completed measurement. No production results are included in the notebook templates.

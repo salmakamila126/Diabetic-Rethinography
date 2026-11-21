@@ -1,4 +1,4 @@
-"""Resumable preparation and atomic CPU measurement using the Phase A engine."""
+"""Resumable preparation, untimed validation, and atomic CPU measurement."""
 
 import copy
 from functools import partial
@@ -13,7 +13,17 @@ import torch
 from novelty import foundation_adaptation as fa
 from novelty import preof_phase1 as phase
 from . import backends, benchmark, models, pruning, registry, reporting
-from .__main__ import _compare, _measure_variant, _output
+from .__main__ import _compare, _evaluate_backends, _measure_variant, _output
+
+
+# Git blob SHA-256 for the changed modules at c101b1a5f72ee027bbb3adff8dd260536187c3e5.
+# The complete predecessor map must match, including every unchanged source file.
+_PRE_VALIDATION_SOURCE = {
+    "__main__.py": "66469efd350cddf85a9e7fa2be336af5cbfeb499b287691d66ab42ba6c4a925a",
+    "hpc.py": "8531a85494b30c8fd69219861d9b4f464b97ef49d0aca2fbaec8d0c05081b61d",
+    "reporting.py": "cf2c0e04195ee3a241a46639bc56136109f8fbdefe7919c029381dec1439cc1e",
+    "workflow.py": "5b1fa03ff9a75013e930e2cf103084e69afcb96c2720c88eff3843e993711916",
+}
 
 
 def read(path):
@@ -132,6 +142,57 @@ def _sample(rows, batches):
             "grade_support": [sum(row["label"] == g for row in selected) for g in registry.CLASS_ORDER]}
 
 
+def _validation_outcome(variants):
+    statuses = [backend["status"] for variant in variants for backend in variant["backends"].values()]
+    failures = len(statuses) - statuses.count("VALIDATED")
+    return {"outcome": "BACKEND_FAILURES" if failures else "PASS", "backend_rows": len(statuses), "failures": failures}
+
+
+def _validate_prepared(target, run, source, digest, prepared, original, batches, validate, plan, entry,
+                       allocation, recheck):
+    identity = {"schema": "convnext-optimization-validation-v1", "stage": "validate", "status": "VALIDATION_COMPLETE",
+                "dataset": entry.dataset, "arm": entry.arm, "protocol_sha256": digest,
+                "framework_source_sha256": source, "prepared_framework_source_sha256": run["framework_source_sha256"],
+                "prepared_receipt_sha256": {_name(ratio): fa._digest_json(receipt)
+                                            for ratio, (_, receipt) in prepared.items()},
+                "sample": run["sample"], "backends": plan["backends"],
+                "parity_tolerances": plan["parity_tolerances"], "receipt": run["receipt"],
+                "timing_performed": False}
+    if target.exists():
+        report = read(target / "report.json")
+        if (any(report.get(key) != value for key, value in identity.items()) or
+                [v["name"] for v in report["variants"]] != [_name(ratio) for ratio in prepared] or
+                any(set(v["backends"]) != set(plan["backends"]) for v in report["variants"]) or
+                any(report.get(key) != value for key, value in _validation_outcome(report["variants"]).items()) or
+                (target / "summary.csv").read_bytes() != reporting.validation_summary(report).encode("utf-8")):
+            raise ValueError("Existing validation report differs from the verified campaign")
+        recheck()
+        models.verified_images(batches)
+        print(f"Verified existing validation report: {target / 'report.json'}", flush=True)
+    else:
+        names = ["global_pixels", "patch_pixels"] if entry.family == "hf_v1_global_local" else ["pixels"]
+        tensor_digest, variants = None, []
+        for ratio, (path, item) in prepared.items():
+            model = _restore(original, path, item)
+            results, tensor_digest = _evaluate_backends(
+                _name(ratio), model, batches, validate, plan, path, tensor_digest,
+                input_names=names, prepared=item["backends"], timed=False)
+            variants.append({"name": _name(ratio), "ratio": ratio, "backends": results})
+            del model
+        recheck()
+        models.verified_images(batches)
+        report = {**identity, "ordered_preprocessed_tensor_sha256": tensor_digest, "variants": variants,
+                  **_validation_outcome(variants),
+                  "runtime": benchmark.runtime(), "allocation": allocation,
+                  "limitations": ["Exploratory frozen validation subset. Validation selected the parent checkpoint.",
+                                  "Shared CPU, FP32 quality and parity only."]}
+        _publish(target, lambda directory: reporting.write_validation_report(directory, report))
+        print(f"Validation report written to {target / 'report.json'}", flush=True)
+    failures = report["failures"]
+    print(f"{entry.arm}_{entry.dataset}: {failures} unsuccessful validation rows. No timing performed.")
+    return 2 if failures else 0
+
+
 def execute(stage, args, entry, plan, allocation):
     plan = {**plan, "prune": list(pruning.RATIOS)}
     output = _output(args)
@@ -158,14 +219,18 @@ def execute(stage, args, entry, plan, allocation):
     run = {"schema": "convnext-optimization-staged-v1", "dataset": entry.dataset, "arm": entry.arm,
            "receipt": receipt, "framework_source_sha256": source, "sample": sample, "protocol": phases,
            "versions": benchmark.runtime()["versions"], "ratios": list(pruning.RATIOS)}
-    digest = fa._digest_json(run)
     run_file = output / "protocol.json"
     if stage == "prepare":
         output.mkdir(exist_ok=True)
         if not run_file.exists():
             fa._atomic_json(run_file, run)
-    if read(run_file) != run:
+    recorded = read(run_file)
+    predecessor = {**run, "framework_source_sha256": {**source, **_PRE_VALIDATION_SOURCE}}
+    if recorded != run and recorded != predecessor:
         raise ValueError("Run protocol differs. Use a new campaign root for changed inputs, code or versions.")
+    if recorded != run and stage == "recover":
+        raise ValueError("Use the preparation revision or a new campaign root to write recovery artifacts")
+    digest = fa._digest_json(recorded)
     native = output / "prepared"
     recovered = output / "recovered"
     ratios = (0.0, *pruning.RATIOS)
@@ -179,6 +244,8 @@ def execute(stage, args, entry, plan, allocation):
 
     if stage == "prepare":
         recheck()
+        if recorded != run and not all((native / _name(ratio) / "prepared.json").is_file() for ratio in ratios):
+            raise ValueError("Use the preparation revision or a new campaign root to finish preparing artifacts")
         native.mkdir(exist_ok=True)
         example = validate(batches[0])
         for ratio in ratios:
@@ -189,6 +256,11 @@ def execute(stage, args, entry, plan, allocation):
         return
 
     prepared = {r: (native / _name(r), _prepared(native / _name(r), digest, r)) for r in ratios}
+    if any(set(item["backends"]) != set(plan["backends"]) for _, item in prepared.values()):
+        raise ValueError("Prepared backend set differs")
+    if stage == "validate":
+        return _validate_prepared(output / "validation", recorded, source, digest, prepared, original, batches,
+                                  validate, plan, entry, allocation, recheck)
     if stage in ("recover", "measure-recovered"):
         raw = output / "measurement/report.json"
         if not raw.is_file():
@@ -265,7 +337,8 @@ def execute(stage, args, entry, plan, allocation):
               "stage": stage, "protocol_sha256": digest, "dataset": entry.dataset, "arm": entry.arm,
               "recovery_policy": policy,
               "runtime": benchmark.runtime(), "allocation": allocation, "sample": sample,
-              "receipt": receipt, "framework_source_sha256": source, "plan": plan,
+              "receipt": receipt, "framework_source_sha256": source,
+              "prepared_framework_source_sha256": recorded["framework_source_sha256"], "plan": plan,
               "variants": [original_result, *before.values(), *after],
               "historical_validation_reference": {"epoch": entry.best["epoch"], "metrics": entry.best["validation"],
                                                   "scope": "original historical full validation"},

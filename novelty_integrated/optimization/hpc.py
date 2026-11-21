@@ -16,7 +16,7 @@ from .__main__ import _parser as run_parser, _plan
 
 GIB = 1024**3
 PRIORITY = ("E5_APTOS2019", "E6_APTOS2019", "E7_APTOS2019", "E5_DDR", "E6_DDR")
-STAGES = ("audit", "prepare", "measure", "recover", "measure-recovered")
+STAGES = ("audit", "prepare", "validate", "measure", "recover", "measure-recovered")
 
 
 def inventory():
@@ -57,6 +57,7 @@ def _parser():
     parser.add_argument("--cpus", help="Allocated Linux logical CPU IDs, e.g. 4-7")
     parser.add_argument("--allocation-id", help="Site allocation identifier or lab approval reference")
     parser.add_argument("--confirm-isolated-cpu", action="store_true")
+    parser.add_argument("--shared-cpu", action="store_true", help="Untimed validate stage only, with taskset and one thread")
     parser.add_argument("--min-free-gib", type=int, default=5, help="Filesystem reserve after new outputs")
     parser.add_argument("--min-ram-gib", type=int, default=6, help="Available host/cgroup RAM floor per job")
     parser.add_argument("--sample-count", type=int, help="Omit for full frozen validation")
@@ -224,7 +225,15 @@ def _resource_guard(args, campaign):
     if (args.stage.startswith("measure") and not args.confirm_isolated_cpu):
         raise ValueError("Measurement requires an exclusive CPU allocation, confirmed explicitly")
     cpus = _parse_cpus(args.cpus)
-    if args.threads < 1 or len(cpus) < args.threads or not set(cpus) <= set(_affinity()):
+    affinity = _affinity()
+    if args.stage == "validate":
+        if not args.shared_cpu or args.confirm_isolated_cpu:
+            raise ValueError("Use --shared-cpu without --confirm-isolated-cpu for untimed validation")
+        if args.threads != 1 or len(cpus) != 1 or cpus != affinity:
+            raise ValueError("Start validation with taskset -c on one allowed logical CPU and use --threads 1")
+    elif args.shared_cpu:
+        raise ValueError("--shared-cpu applies only to untimed validation")
+    if args.threads < 1 or len(cpus) < args.threads or not set(cpus) <= set(affinity):
         raise ValueError("Requested threads and CPUs exceed the process allocation")
     quota = _cpu_quota()
     if quota is not None and quota < args.threads:
@@ -278,11 +287,13 @@ def main(argv=None):
                                     or not args.recovery_epochs):
         raise ValueError("Recovery requires explicit authorization, epochs and an E5/E6 job")
     if args.stage != "recover" and (args.authorize_recovery or args.recovery_epochs or args.gpu_uuid
-                                    or args.confirm_ddr_e7_safe):
+                                    or args.confirm_ddr_e7_safe or args.recovery_device != "cpu"):
         raise ValueError("Recovery flags cannot be used in another stage")
     root, campaign, checkpoint, snapshot, manifest = _arguments(args, entry)
     if not entry.evidence:
         raise ValueError(f"{args.job}: {entry.status}")
+    if args.stage == "validate" and not (campaign / args.job / "protocol.json").is_file():
+        raise FileNotFoundError("Validation requires an existing campaign/job protocol.json from prepare")
     cpus = _resource_guard(args, campaign)
     # Guard paths against datasets, model snapshots, checkpoint directories and Git worktrees.
     fa._safe_out(campaign / args.job, [checkpoint.parent, snapshot, root / "datasets", root / "cad_vit_runs"])
@@ -326,9 +337,12 @@ def main(argv=None):
         campaign.mkdir(parents=True, exist_ok=True)
         from .workflow import execute
 
-        execute(args.stage, run, entry, plan, {"id": args.allocation_id, "cpus": cpus, "threads": args.threads,
-                                             "exclusive_cpu_confirmed": args.confirm_isolated_cpu})
+        allocation = {"id": args.allocation_id, "cpus": cpus, "threads": args.threads,
+                      "exclusive_cpu_confirmed": args.confirm_isolated_cpu}
+        if args.stage == "validate":
+            allocation["cpu_mode"] = "shared"
+        return execute(args.stage, run, entry, plan, allocation)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
