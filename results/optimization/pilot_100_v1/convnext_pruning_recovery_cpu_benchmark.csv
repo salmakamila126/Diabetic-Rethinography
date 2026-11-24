@@ -1,0 +1,11 @@
+﻿record_type,pruning_ratio,backend,backbone_parameters,parameter_reduction_pct,validation_macro_f1_after_recovery,validation_qwk_after_recovery,median_latency_ms_per_image,throughput_images_per_second,model_size_mb,cpu_macro_f1,cpu_qwk,validation_macro_f1_after_recovery,validation_qwk_after_recovery
+recovery_summary,0%,baseline_best_pt,27820128,0.0,0.708,0.905,,,,,,,
+cpu_backend_benchmark,10%,onnxruntime_cpu,25227780,9.32,,,31.527171,31.718672,96.33289,0.682156,0.890215,0.6682,0.8765
+cpu_backend_benchmark,10%,torchscript_cpu,25227780,9.32,,,39.657402,25.215974,96.585386,0.682156,0.890215,0.6682,0.8765
+cpu_backend_benchmark,10%,pytorch_cpu_eager,25227780,9.32,,,43.579053,22.946804,96.322398,0.682156,0.890215,0.6682,0.8765
+cpu_backend_benchmark,30%,onnxruntime_cpu,20045970,27.94,,,26.975041,37.071306,76.565819,0.427284,0.744395,0.4501,0.7854
+cpu_backend_benchmark,30%,torchscript_cpu,20045970,27.94,,,33.838229,29.552374,76.818419,0.427284,0.744395,0.4501,0.7854
+cpu_backend_benchmark,30%,pytorch_cpu_eager,20045970,27.94,,,37.857058,26.415154,76.55543,0.427284,0.744395,0.4501,0.7854
+cpu_backend_benchmark,50%,onnxruntime_cpu,14867616,46.56,,,21.274974,47.003583,56.811966,0.30026,0.656085,0.3145,0.7095
+cpu_backend_benchmark,50%,torchscript_cpu,14867616,46.56,,,26.739548,37.39779,57.066002,0.30026,0.656085,0.3145,0.7095
+cpu_backend_benchmark,50%,pytorch_cpu_eager,14867616,46.56,,,30.49095,32.796617,56.801951,0.30026,0.656085,0.3145,0.7095
