@@ -40,6 +40,14 @@ Reproduksi parsial yang dipandu paper [CAD-ViT (2025)](https://doi.org/10.1109/A
 
 Rujukan ke sel kode atau nomor bagian lama dalam catatan di bawah menunjuk ke **notebook arsip**. Laporan utama memakai struktur ringkas baru; jangan menjalankan ulang evaluator final test dari contoh historis.
 
+## Research Platforms & Model Repository
+
+- [Weights & Biases (W&B) — Experiment Tracking](https://forge.coreweave.com/wandb/salmakamila-university-of-brawijaya/CAD-ViT%20Research%20%26%20Development?nw=nwusersalmakamila101)
+  Platform pemantauan dan dokumentasi eksperimen penelitian RETINOVA, mencakup reproduksi CAD-ViT, eksperimen ConvNeXt-Tiny, metrik evaluasi, riwayat validasi, dan hasil optimasi yang tersedia. Digunakan untuk menelusuri dan membandingkan hasil eksperimen yang telah dicatat.
+
+- [Hugging Face — Model & Research Repository](https://huggingface.co/salmakamila126/diabetic-retinopathy-convnext-research)
+  Repositori Hugging Face untuk publikasi dan dokumentasi artefak penelitian ConvNeXt-Tiny pada klasifikasi tingkat keparahan retinopati diabetik. Digunakan sebagai akses ke model dan artefak penelitian yang benar-benar tersedia pada repositori tersebut.
+
 ## Studi ConvNeXt-Tiny B0–B4 (terpisah dari reproduksi CAD-ViT)
 
 [Notebook baseline per dataset](notebooks/README.md#baseline-convnext-tiny-b0b4) memuat sepuluh run 20 epoch pada **validasi**. [Bukti JSON dan figur](novelty/convnext_b0_b4/validation_evidence.json) menyimpan 200 epoch asli beserta hash sumber dan figur. [Protokol P1–P4](docs/CADVIT_NOVELTY_PROTOCOL.md) mencatat prototipe CAD-ViT sebagai jalur penelitian terpisah.
